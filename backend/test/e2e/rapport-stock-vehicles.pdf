@@ -1,0 +1,50 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1175 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (VECTRACOM) Tj ET
+BT /F2 14 Tf 1 0 0 1 56 745.89 Tm (Usage stock et vehicules) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 725.89 Tm (2026-09-01 -> 2026-09-30) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 695.89 Tm (Synthese) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 680.89 Tm (Indicateur   |   Valeur) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 664.89 Tm (Matériel consommé \(unités\)   |   40) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 648.89 Tm (Installations validées   |   3) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 632.89 Tm (Ratio consommation/installation   |   13.33) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 616.89 Tm (Coût transport total \(FCFA\)   |   50000) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 585.89 Tm (Consommation) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 570.89 Tm (reference   |   designation   |   quantity   |   unit) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 554.89 Tm (FO-CAB-24   |   Cable FO 24   |   40   |   m) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 523.89 Tm (Vehicules) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 508.89 Tm (vehicleId   |   immatriculation   |   modele   |   kilometrage   |   coutTransport) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 492.89 Tm (1af0945a-95cc-482e-816f-b681446ce678   |   DK-4521-AB   |   Toyota Hilux   |   84500   |   50000) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000001484 00000 n 
+0000001554 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1629
+%%EOF

@@ -1,0 +1,21 @@
+{
+  "name": "vectracom",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VECTRACOM — SaaS multi-tenant de gestion des opérations terrain pour sous-traitants télécom (client pilote : ONECOMIT)",
+  "workspaces": [
+    "backend",
+    "web-admin"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose down",
+    "backend:dev": "npm run dev --workspace backend",
+    "backend:build": "npm run build --workspace backend",
+    "backend:seed": "npm run seed:super-admin --workspace backend",
+    "web:dev": "npm run dev --workspace web-admin"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

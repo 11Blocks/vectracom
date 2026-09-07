@@ -1,0 +1,50 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1172 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (VECTRACOM) Tj ET
+BT /F2 14 Tf 1 0 0 1 56 745.89 Tm (Rapport d'incident INC-2026-0001) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 721.89 Tm (Rubrique : PBO    Severite : MAJEUR    Statut : corrige) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 705.89 Tm (Zone : Mbour) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 689.89 Tm (GPS : 14.4862300, -17.0787600) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 673.89 Tm (Signale le 03/09/2026 12:13:20 via WHATSAPP) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 649.89 Tm (PBO : B08/D1-4-7 - defaut DESORGANISE) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 625.89 Tm (Clients impactes : 45) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 610.89 Tm (Annotation : PBO B08/D1-4-7 DESORGANISE 45 clients) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 579.89 Tm (Traitement) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 563.89 Tm (Equipe assignee : af06e086-62d3-40a9-97c5-366b076af053) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 547.89 Tm (Action realisee : Reorganisation complete du PBO, 12 sertissages refaits) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 531.89 Tm (Resolu le 03/09/2026 12:13:31) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 516.89 Tm (Materiel : [{"quantity":12,"itemNumber":29}]) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 499.89 Tm (Photos : 1 piece\(s\) jointe\(s\)) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000001481 00000 n 
+0000001551 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1626
+%%EOF

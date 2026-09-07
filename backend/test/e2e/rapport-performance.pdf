@@ -1,0 +1,53 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1342 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (VECTRACOM) Tj ET
+BT /F2 14 Tf 1 0 0 1 56 745.89 Tm (Performance missions et techniciens) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 725.89 Tm (2026-09-01 -> 2026-09-30) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 695.89 Tm (Synthese) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 680.89 Tm (Indicateur   |   Valeur) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 664.89 Tm (Missions totales   |   6) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 648.89 Tm (Missions clôturées   |   5) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 632.89 Tm (OK   |   4) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 616.89 Tm (NOK   |   1) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 600.89 Tm (Taux OK \(%\)   |   80) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 584.89 Tm (Taux NOK \(%\)   |   20) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 553.89 Tm (Par technicien) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 538.89 Tm (technicianId   |   fullName   |   isTeamLeader   |   missions   |   ok   |   nok   |   okRate) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 522.89 Tm (aeee1003-0e5e-4176-a5ad-690791575c04   |   Ndiaye Moussa   |   true   |   3   |   2   |   1   |   66.67) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 506.89 Tm (6de79cb8-1bb0-4a74-985a-9231f5bd4fe8   |   Sow Abdallahi   |   false   |   2   |   2   |   0   |   100) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 475.89 Tm (Motifs NOK) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 460.89 Tm (reason   |   count) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 444.89 Tm (PBO inaccessible   |   1) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000001651 00000 n 
+0000001721 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1796
+%%EOF

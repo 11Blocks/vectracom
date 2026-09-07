@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Vary: Origin
+Access-Control-Allow-Credentials: true
+Content-Type: application/pdf
+Content-Disposition: inline; filename="INC-2026-0001.pdf"
+Content-Length: 1829
+ETag: W/"725-GVvSh8ER4ym3oJGu5DI+zmdc680"
+Date: Thu, 03 Sep 2026 12:13:33 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

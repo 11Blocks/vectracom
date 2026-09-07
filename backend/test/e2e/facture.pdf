@@ -1,0 +1,53 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1610 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (ONECOMIT) Tj ET
+BT /F2 13 Tf 1 0 0 1 56 746.89 Tm (Facture mensuelle de prestations) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 722.89 Tm (Facture : FACT-202609-0001    Statut : finalisee) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 706.89 Tm (Periode : 2026-09-01 au 2026-09-30) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 690.89 Tm (Client : SONATEL SA    Fournisseur : 3STB) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 660.89 Tm (Detail des prestations) Tj ET
+BT /F2 10 Tf 1 0 0 1 56 644.89 Tm (Categorie      Item                                          Qte   PU         Total) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 629.89 Tm (PRODUCTION     INSTALLATION                                     3     18/000       54/000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 613.89 Tm (SAV            SAV                                              2      8/500       17/000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 597.89 Tm (TS             Item 41  Raccordement liaison spécialisée O     1     45/000       45/000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 581.89 Tm (TS             OSM                                              1     45/000       45/000) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 552.89 Tm (Penalites KPI) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 537.89 Tm (Aucune penalite appliquee) Tj ET
+BT /F2 10 Tf 1 0 0 1 56 508.89 Tm (Total HT : 161/000 FCFA) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 492.89 Tm (TVA \(18%\) : 28/980 FCFA) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 476.89 Tm (Penalites : -0 FCFA) Tj ET
+BT /F2 10 Tf 1 0 0 1 56 460.89 Tm (Total TTC : 189/980 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 437.89 Tm (Notes : Facture Septembre 2026 - verifiee avec le bordereau 3STB) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000001919 00000 n 
+0000001989 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2064
+%%EOF

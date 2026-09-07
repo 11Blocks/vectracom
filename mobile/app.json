@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "VECTRACOM",
+    "slug": "vectracom",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": { "backgroundColor": "#0f9d70", "resizeMode": "contain" },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "sn.green-t.vectracom",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Photos de preuve pour les missions",
+        "NSLocationWhenInUseUsageDescription": "GPS pour la géolocalisation des interventions et le suivi terrain",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "GPS en arrière-plan pour le suivi des équipes terrain même quand l'app est fermée",
+        "NSLocationAlwaysUsageDescription": "GPS en arrière-plan pour le suivi des équipes terrain",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+    "android": {
+      "package": "sn.green-t.vectracom",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-camera",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Autoriser VECTRACOM à utiliser votre position en arrière-plan pour le suivi terrain.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      "expo-notifications",
+      "expo-task-manager"
+    ],
+    "extra": { "apiUrl": "http://192.168.1.27:3100/api/v1" }
+  }
+}

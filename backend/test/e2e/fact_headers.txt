@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Vary: Origin
+Access-Control-Allow-Credentials: true
+Content-Type: application/pdf
+Content-Disposition: inline; filename="FACT-202609-0001.pdf"
+Content-Length: 2241
+ETag: W/"8c1-UZNSZR1dql/iVIaflDB6i6OljVg"
+Date: Thu, 03 Sep 2026 12:10:45 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

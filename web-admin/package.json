@@ -1,0 +1,33 @@
+{
+  "name": "@vectracom/web-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VECTRACOM — Back-office Next.js (développé en phase ultérieure)",
+  "dependencies": {
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.40.0",
+    "maplibre-gl": "^6.7.0",
+    "next": "^14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.6.0",
+    "typescript": "^5.9.3",
+    "zustand": "^5.0.15"
+  },
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.27",
+    "tailwindcss": "^3.4.19"
+  }
+}

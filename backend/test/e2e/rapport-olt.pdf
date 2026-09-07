@@ -1,0 +1,49 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 999 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (VECTRACOM) Tj ET
+BT /F2 14 Tf 1 0 0 1 56 745.89 Tm (Activite par zone OLT) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 725.89 Tm (2026-09-01 -> 2026-09-30) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 695.89 Tm (Synthese) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 680.89 Tm (Indicateur   |   Valeur) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 664.89 Tm (Dossiers reçus   |   6) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 648.89 Tm (Exécutés   |   5) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 632.89 Tm (En attente   |   1) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 616.89 Tm (Taux réussite \(%\)   |   80) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 585.89 Tm (Par zone OLT) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 570.89 Tm (zone   |   recues   |   executees   |   enAttente   |   reussies   |   tauxReussite) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 554.89 Tm (O_GMB   |   3   |   3   |   0   |   3   |   100) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 538.89 Tm (O_THI   |   2   |   1   |   1   |   0   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 522.89 Tm (O_DKR   |   1   |   1   |   0   |   1   |   100) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000001307 00000 n 
+0000001377 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1452
+%%EOF

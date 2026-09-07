@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* VECTRACOM Design System — Guide Frontend v1.0 */
+    --background: #0a0f0d;
+    --foreground: #e8ede9;
+    --card: #111916;
+    --card-foreground: #e8ede9;
+    --popover: #111916;
+    --popover-foreground: #e8ede9;
+    --primary: #0f9d70;
+    --primary-foreground: #ffffff;
+    --secondary: #1a2420;
+    --secondary-foreground: #e8ede9;
+    --muted: #1a2420;
+    --muted-foreground: #7a8f80;
+    --accent: #172019;
+    --accent-foreground: #e8ede9;
+    --destructive: #C0392B;
+    --border: #1e2e25;
+    --input: #1e2e25;
+    --ring: #0f9d70;
+    /* Sidebar */
+    --sidebar: #0d1210;
+    --sidebar-foreground: #c5d1c8;
+    --sidebar-primary: #0f9f970;
+    --sidebar-primary: #0f9d70;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #172019;
+    --sidebar-accent-foreground: #e8ede9;
+    --sidebar-border: #1e2e25;
+    --sidebar-ring: #0f9d70;
+    /* Charts */
+    --chart-1: #0f9d70;
+    --chart-2: #f5a623;
+    --chart-3: #3b82f6;
+    --chart-4: #C0392B;
+    --chart-5: #D9822B;
+    /* Radius */
+    --radius: 0.625rem;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Scrollbars VECTRACOM */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0f0d; }
+::-webkit-scrollbar-thumb { background: #1e2e25; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3d32; }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes shimmer { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
+
+.animate-in { animation: fadeIn 0.2s ease-out; }
+.slide-in-from-right-5 { animation: slideIn 0.3s ease-out; }
+.fade-in { animation: fadeIn 0.2s ease-out; }
+.zoom-in-95 { animation: fadeIn 0.15s ease-out; }
+
+/* Skeleton */
+.skeleton {
+  background: linear-gradient(90deg, #111916 25%, #1a2420 50%, #111916 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+/* Focus visible (a11y) */
+:focus-visible {
+  outline: 2px solid #0f9d70;
+  outline-offset: 2px;
+}

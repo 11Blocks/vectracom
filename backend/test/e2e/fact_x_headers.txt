@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Vary: Origin
+Access-Control-Allow-Credentials: true
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Content-Disposition: attachment; filename="FACT-202609-0001.xlsx"
+Content-Length: 18504
+ETag: W/"4848-8bd71qwEVpeE5OQskE27pcGB6DA"
+Date: Thu, 03 Sep 2026 12:10:45 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

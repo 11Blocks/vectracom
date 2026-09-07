@@ -1,0 +1,69 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 3267 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (VECTRACOM) Tj ET
+BT /F2 14 Tf 1 0 0 1 56 745.89 Tm (KPI SONATEL) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 725.89 Tm (2026-09) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 695.89 Tm (Synthese) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 680.89 Tm (Indicateur   |   Valeur) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 664.89 Tm (KPI atteints   |   9) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 648.89 Tm (KPI non atteints   |   10) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 632.89 Tm (Pénalités \(FCFA\)   |   155000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 616.89 Tm (Bonus éligible   |   non) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 600.89 Tm (Bonus \(FCFA\)   |   0) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 569.89 Tm (Detail KPI) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 554.89 Tm (KPI   |   Cible   |   Reel   |   Statut   |   Feu   |   Penalite) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 538.89 Tm (controle.equipes_exclues   |   0   |   0   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 522.89 Tm (controle.equipes_non_validees   |   0   |   1   |   non_atteint   |   orange   |   100000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 506.89 Tm (controle.equipes_suspendues   |   0   |   0   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 490.89 Tm (controle.taux_equipes_non_conformes   |   2   |   100   |   non_atteint   |   rouge   |   50000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 474.89 Tm (controle.taux_rejet   |   2   |   0   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 458.89 Tm (production.backlog_5j_tous   |   0   |   1   |   non_atteint   |   orange   |   5000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 442.89 Tm (production.backlog_b2b_3j   |   2   |   20   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 426.89 Tm (production.backlog_em_4j   |   5   |   20   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 410.89 Tm (production.backlog_hm_mm_3j   |   5   |   20   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 394.89 Tm (production.on_time_b2b_2j   |   98   |   100   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 378.89 Tm (production.on_time_em_3j   |   95   |   100   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 362.89 Tm (production.on_time_hm_mm_2j   |   95   |   100   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 346.89 Tm (production.premier_coup_em   |   98   |   75   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 330.89 Tm (sav.releve_4h_b2b   |   60   |   0   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 314.89 Tm (sav.releve_4h_b2c   |   50   |   0   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 298.89 Tm (sav.respect_rdv   |   95   |   100   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 282.89 Tm (sav.satisfaction_client   |   95   |   80   |   non_atteint   |   rouge   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 266.89 Tm (sav.taux_repetitions_30j   |   2   |   0   |   atteint   |   vert   |   0) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 250.89 Tm (stock.taux_conformite   |   100   |   100   |   atteint   |   vert   |   0) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 219.89 Tm (Historique) Tj ET
+BT /F2 9 Tf 1 0 0 1 56 204.89 Tm (Mois   |   Atteints   |   NonAtteints   |   Penalites) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 188.89 Tm (2026-09   |   9   |   10   |   155000) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000003576 00000 n 
+0000003646 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3721
+%%EOF

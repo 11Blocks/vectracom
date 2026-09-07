@@ -1,0 +1,150 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import { IsISO8601, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Roles, UserRole } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { IncidentsService } from './incidents.service';
+import { CreateIncidentDto } from './dto/create-incident.dto';
+import { AssignIncidentDto } from './dto/assign-incident.dto';
+import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
+import { ResolveIncidentDto } from './dto/resolve-incident.dto';
+import {
+  INCIDENT_RUBRIQUES,
+  INCIDENT_SEVERITIES,
+  INCIDENT_SOURCES,
+  INCIDENT_STATUSES,
+} from './entities/incident.entity';
+
+class ListIncidentsQueryDto {
+  @IsOptional() @IsString() @IsIn(INCIDENT_RUBRIQUES as unknown as string[]) rubrique?: string;
+  @IsOptional() @IsString() @IsIn(INCIDENT_STATUSES as unknown as string[]) status?: string;
+  @IsOptional() @IsString() @IsIn(INCIDENT_SEVERITIES as unknown as string[]) severity?: string;
+  @IsOptional() @IsString() zone?: string;
+}
+
+class GenerateSavDto {
+  @IsIn(['groupee', 'individuelle'])
+  mode!: string;
+
+  @IsOptional()
+  @IsUUID()
+  teamId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  dateMission?: string;
+}
+
+@Controller('incidents')
+@Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
+export class IncidentsController {
+  constructor(private readonly incidentsService: IncidentsService) {}
+
+  @Get()
+  list(@CurrentUser('companyId') companyId: string | null, @Query() query: ListIncidentsQueryDto) {
+    this.requireTenant(companyId);
+    return this.incidentsService.list(companyId!, query);
+  }
+
+  /** Signalement terrain (chef d'équipe) ou remontée WhatsApp. */
+  @Post()
+  create(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateIncidentDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.create(companyId!, dto, userId);
+  }
+
+  @Get(':id')
+  findOne(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+    this.requireTenant(companyId);
+    return this.incidentsService.findOne(companyId!, id);
+  }
+
+  /** Génération de missions SAV pour les ND impactés — validation humaine explicite. */
+  @Post(':id/generate-sav')
+  generateSav(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Body() dto: GenerateSavDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.generateSavMissions(companyId!, id, {
+      mode: dto.mode as 'groupee' | 'individuelle',
+      teamId: dto.teamId,
+      dateMission: dto.dateMission,
+    });
+  }
+
+  @Put(':id/assign')
+  @Roles(UserRole.ADMIN)
+  assign(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Body() dto: AssignIncidentDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.assignTeam(companyId!, id, dto);
+  }
+
+  @Put(':id/status')
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
+  updateStatus(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Body() dto: UpdateIncidentStatusDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.updateStatus(companyId!, id, dto);
+  }
+
+  @Put(':id/resolve')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
+  resolve(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: ResolveIncidentDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.resolve(companyId!, id, { ...dto, resolvedBy: dto.resolvedBy ?? userId });
+  }
+
+  @Post(':id/report')
+  @HttpCode(200)
+  async report(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    this.requireTenant(companyId);
+    const { buffer, fileName } = await this.incidentsService.generateReport(companyId!, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Put(':id/close')
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
+  close(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+    this.requireTenant(companyId);
+    return this.incidentsService.close(companyId!, id);
+  }
+
+  private requireTenant(companyId: string | null): void {
+    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
+  }
+}

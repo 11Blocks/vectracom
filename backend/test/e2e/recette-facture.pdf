@@ -1,0 +1,61 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 2406 >>
+stream
+BT /F2 16 Tf 1 0 0 1 56 769.89 Tm (ONECOMIT) Tj ET
+BT /F2 13 Tf 1 0 0 1 56 746.89 Tm (Facture mensuelle de prestations) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 722.89 Tm (Facture : FACT-202509-0001    Statut : finalisee) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 706.89 Tm (Periode : 2025-09-01 au 2025-09-30) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 690.89 Tm (Client : SONATEL SA    Fournisseur : 3STB) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 660.89 Tm (Detail des prestations) Tj ET
+BT /F2 10 Tf 1 0 0 1 56 644.89 Tm (Categorie      Item                                          Qte   PU         Total) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 629.89 Tm (PRODUCTION     INSTALLATION                                     1     18/000       18/000) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 613.89 Tm (SAV            SAV                                              1      9/000        9/000) Tj ET
+BT /F2 12 Tf 1 0 0 1 56 584.89 Tm (Penalites KPI) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 569.89 Tm (production.on_time_em_3j: cible 95 / reel 0 ’ -17/100 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 553.89 Tm (production.backlog_em_4j: cible 5 / reel 50 ’ -8/100 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 537.89 Tm (production.on_time_hm_mm_2j: cible 95 / reel 0 ’ -17/100 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 521.89 Tm (production.backlog_hm_mm_3j: cible 5 / reel 50 ’ -8/100 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 505.89 Tm (production.on_time_b2b_2j: cible 98 / reel 0 ’ -17/640 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 489.89 Tm (production.backlog_b2b_3j: cible 2 / reel 50 ’ -8/640 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 473.89 Tm (production.backlog_5j_tous: cible 0 / reel 2 ’ -10/000 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 457.89 Tm (sav.satisfaction_client: cible 95 / reel 50 ’ -4/050 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 441.89 Tm (controle.equipes_non_validees: cible 0 / reel 4 ’ -400/000 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 425.89 Tm (controle.taux_equipes_non_conformes: cible 2 / reel 100 ’ -200/000 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 409.89 Tm (stock.taux_conformite: cible 100 / reel 10 ’ -9/000/000 FCFA) Tj ET
+BT /F2 10 Tf 1 0 0 1 56 380.89 Tm (Total HT : 27/000 FCFA) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 364.89 Tm (TVA \(18%\) : 4/860 FCFA) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 348.89 Tm (Penalites : -9/690/730 FCFA) Tj ET
+BT /F2 10 Tf 1 0 0 1 56 332.89 Tm (Total TTC : -9/658/870 FCFA) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 309.89 Tm (Notes : Recette) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000002715 00000 n 
+0000002785 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2860
+%%EOF
