@@ -1,11 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-export const API_URL =
-  (Constants.expoConfig?.extra?.apiUrl as string) || 'http://localhost:3100/api/v1';
-
 const TOKEN_KEY = 'vectracom_token';
 const USER_KEY = 'vectracom_user';
+const API_URL_KEY = 'vectracom_api_url';
+
+const DEFAULT_API_URL =
+  (Constants.expoConfig?.extra?.apiUrl as string) || 'http://localhost:3100/api/v1';
+
+let apiUrlOverride: string | null = null;
+
+/** URL API effective (override AsyncStorage ou app.json). */
+export function getApiUrl(): string {
+  return (apiUrlOverride || DEFAULT_API_URL).replace(/\/$/, '');
+}
+
+/** @deprecated Prefer getApiUrl() — conservé pour imports existants. */
+export const API_URL = DEFAULT_API_URL;
+
+export async function loadApiUrlOverride() {
+  const v = await AsyncStorage.getItem(API_URL_KEY);
+  apiUrlOverride = v?.trim() || null;
+}
+
+export async function setApiUrlOverride(url: string | null) {
+  const cleaned = url?.trim().replace(/\/$/, '') || null;
+  if (cleaned) await AsyncStorage.setItem(API_URL_KEY, cleaned);
+  else await AsyncStorage.removeItem(API_URL_KEY);
+  apiUrlOverride = cleaned;
+}
+
+export function getDefaultApiUrl() {
+  return DEFAULT_API_URL;
+}
 
 export type AuthUser = {
   id: string;
@@ -15,6 +42,27 @@ export type AuthUser = {
   companyId?: string | null;
   companyName?: string | null;
 };
+
+type AuthExpiredListener = () => void;
+const authExpiredListeners = new Set<AuthExpiredListener>();
+
+/** App s’abonne pour revenir à l’écran login si le JWT expire (12h). */
+export function onAuthExpired(listener: AuthExpiredListener) {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
+}
+
+function notifyAuthExpired() {
+  authExpiredListeners.forEach((l) => {
+    try {
+      l();
+    } catch {
+      /* ignore */
+    }
+  });
+}
 
 export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
@@ -40,7 +88,7 @@ export async function clearSession() {
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`${getApiUrl()}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -55,6 +103,17 @@ export async function logout() {
   await clearSession();
 }
 
+export async function pingHealth(): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const res = await fetch(`${getApiUrl()}/health`, { method: 'GET' });
+    if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+    const body = await res.json().catch(() => ({}));
+    return { ok: true, detail: body.db === 'up' ? 'API + DB OK' : 'API OK' };
+  } catch (e: any) {
+    return { ok: false, detail: e?.message || 'Injoignable' };
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {
@@ -63,9 +122,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${getApiUrl()}${path}`, { ...options, headers });
+  } catch {
+    throw new Error('Réseau indisponible — vérifiez le Wi‑Fi et l’API');
+  }
+
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    await clearSession();
+    notifyAuthExpired();
+    throw new Error('Session expirée — reconnectez-vous');
+  }
+
   if (!res.ok) {
     const msg = Array.isArray(body.message) ? body.message.join(', ') : body.message;
     throw new Error(msg || `Erreur ${res.status}`);
@@ -96,12 +168,22 @@ export async function uploadFile(localUri: string, category = 'missions'): Promi
     type: 'image/jpeg',
   } as any);
 
-  const res = await fetch(`${API_URL}/files/upload?category=${encodeURIComponent(category)}`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${getApiUrl()}/files/upload?category=${encodeURIComponent(category)}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+  } catch {
+    throw new Error('Réseau indisponible — upload impossible');
+  }
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    await clearSession();
+    notifyAuthExpired();
+    throw new Error('Session expirée — reconnectez-vous');
+  }
   if (!res.ok) throw new Error(body.message || `Upload ${res.status}`);
   return body.url as string;
 }

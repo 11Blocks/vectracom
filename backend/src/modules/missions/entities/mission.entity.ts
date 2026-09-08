@@ -76,6 +76,8 @@ export class Mission extends BaseEntity {
     adresse?: string | null;
     dateValidation?: string | null;
     observations?: string | null;
+    heureDebut?: string | null;
+    heureFin?: string | null;
   } | null;
 
   // ----- Données SONATEL réelles (Planning global FTTH, lot P1) -----

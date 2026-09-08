@@ -105,7 +105,7 @@ export class SerialLifecycleController {
     @Body() dto: InstallDto,
   ) {
     this.requireTenant(companyId);
-    return this.lifecycle.installAtClient(companyId!, id, dto.nd, dto.missionId);
+    return this.lifecycle.installAtClient(companyId!, id, dto.nd ?? '', dto.missionId);
   }
 
   @Post(':id/return')

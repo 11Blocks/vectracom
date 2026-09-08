@@ -43,6 +43,17 @@ export class TechniciansController {
     return this.techniciansService.list(companyId!, { leadersOnly: true });
   }
 
+  /** Technicien rattaché au compte connecté (mobile présence / GPS). */
+  @Get('me')
+  me(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('fullName') fullName: string | null,
+  ) {
+    this.requireTenant(companyId);
+    return this.techniciansService.findMe(companyId!, userId, fullName);
+  }
+
   @Get('by-team/:teamId')
   byTeam(
     @CurrentUser('companyId') companyId: string | null,

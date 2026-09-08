@@ -8,6 +8,7 @@ export const NOTIFICATION_TYPES = [
   'stock',
   'incident',
   'paiement',
+  'chat',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

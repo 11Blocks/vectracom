@@ -81,6 +81,7 @@ export class IncidentsService {
         ndList: dto.ndList ?? [],
         annotationOriginale: dto.annotationOriginale ?? null,
         photos: dto.photos ?? [],
+        relatedMissionIds: dto.relatedMissionIds ?? [],
         status: 'signalement',
         severity: severityFromClients(clients),
       }),

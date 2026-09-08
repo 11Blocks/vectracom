@@ -1,0 +1,11 @@
+# Dendrite sample — copier en dendrite.yaml après generate-keys
+# Voir README.md dans ce dossier.
+
+global:
+  server_name: vectracom.local
+  private_key: matrix_key.pem
+
+client_api:
+  registration_disabled: true
+  guests_disabled: true
+  registration_shared_secret: "vectracom-dev-matrix-shared-secret-change-me"

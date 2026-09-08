@@ -57,4 +57,17 @@ export async function saveFieldReportData(missionId: string, data: Record<string
   return api.post(`/missions/${missionId}/field-report/step/data`, { data: { data } });
 }
 
+export async function saveMissionMaterials(
+  missionId: string,
+  materialsConsumed: Array<{ itemNumber?: number; designation?: string; quantity: number }>,
+) {
+  return api.post(`/missions/${missionId}/field-report/step/5`, {
+    step5: { materialsConsumed },
+  });
+}
+
+export async function updateMissionStatus(id: string, status: string, rejectionReason?: string) {
+  return api.patch(`/missions/${id}/status`, { status, rejectionReason });
+}
+
 export { resolveTemplateKey };

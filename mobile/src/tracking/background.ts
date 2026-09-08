@@ -5,6 +5,7 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { recordMyPosition } from '../services/geolocation';
+import { colors } from '../theme/colors';
 
 export const BACKGROUND_LOCATION_TASK = 'VECTRACOM_BACKGROUND_LOCATION';
 
@@ -90,7 +91,7 @@ export async function startBackgroundTracking(): Promise<boolean> {
     foregroundService: {
       notificationTitle: 'VECTRACOM — suivi GPS',
       notificationBody: 'Localisation active pour le suivi terrain',
-      notificationColor: '#0f9d70',
+      notificationColor: colors.primary,
     },
   });
   return true;

@@ -137,6 +137,52 @@ export class HrService {
     return qb.getMany();
   }
 
+  async createLeaveRequestForUser(
+    companyId: string,
+    userFullName: string,
+    dto: { startDate: string; endDate: string; reason?: string },
+  ) {
+    if (dto.endDate < dto.startDate) {
+      throw new BadRequestException('La date de fin précède la date de début');
+    }
+    let employee = await this.employeeRepository
+      .createQueryBuilder('e')
+      .where('e.companyId = :companyId', { companyId })
+      .andWhere('LOWER(e.fullName) = LOWER(:n)', { n: userFullName.trim() })
+      .getOne();
+    if (!employee) {
+      employee = await this.employeeRepository.save(
+        this.employeeRepository.create({
+          companyId,
+          fullName: userFullName.trim() || 'Employé mobile',
+          jobTitle: 'Terrain',
+          status: 'actif',
+          documents: [],
+        }),
+      );
+    }
+    return this.leaveRepository.save(
+      this.leaveRepository.create({
+        companyId,
+        employeeId: employee.id,
+        startDate: dto.startDate.slice(0, 10),
+        endDate: dto.endDate.slice(0, 10),
+        reason: dto.reason?.trim() ?? null,
+        status: 'en_attente',
+      }),
+    );
+  }
+
+  async listMyLeaveRequests(companyId: string, userFullName: string) {
+    const employee = await this.employeeRepository
+      .createQueryBuilder('e')
+      .where('e.companyId = :companyId', { companyId })
+      .andWhere('LOWER(e.fullName) = LOWER(:n)', { n: userFullName.trim() })
+      .getOne();
+    if (!employee) return [];
+    return this.listLeaveRequests(companyId, { employeeId: employee.id });
+  }
+
   /** Validation manager — passe l'employé en congé à l'approbation. */
   async decideLeave(companyId: string, id: string, decision: 'approuve' | 'refuse') {
     const request = await this.leaveRepository.findOne({ where: { companyId, id } });
@@ -162,14 +208,66 @@ export class HrService {
     });
     if (!technician) throw new BadRequestException('Technicien inconnu pour ce tenant');
 
+    return this.upsertAttendanceSheet(companyId, dto.technicianId, dto);
+  }
+
+  /**
+   * Présence mobile : résout le technicien depuis le JWT (userId → homonyme → chef).
+   */
+  async saveAttendanceForUser(
+    companyId: string,
+    userId: string,
+    userFullName: string | null | undefined,
+    dto: Omit<CreateAttendanceDto, 'technicianId'>,
+  ) {
+    const tech = await this.resolveTechnicianForUser(companyId, userId, userFullName);
+    return this.upsertAttendanceSheet(companyId, tech.id, dto);
+  }
+
+  private async resolveTechnicianForUser(
+    companyId: string,
+    userId: string,
+    userFullName?: string | null,
+  ) {
+    const linked = await this.technicianRepository.findOne({
+      where: { companyId, userId, active: true },
+    });
+    if (linked) return linked;
+
+    if (userFullName?.trim()) {
+      const byName = await this.technicianRepository
+        .createQueryBuilder('t')
+        .where('t.company_id = :cid AND t.active = true', { cid: companyId })
+        .andWhere('LOWER(t.full_name) = LOWER(:name)', { name: userFullName.trim() })
+        .orderBy('t.is_team_leader', 'DESC')
+        .getOne();
+      if (byName) return byName;
+    }
+
+    const leader = await this.technicianRepository.findOne({
+      where: { companyId, active: true, isTeamLeader: true },
+      order: { createdAt: 'ASC' },
+    });
+    if (leader) return leader;
+
+    throw new BadRequestException(
+      'Aucun technicien lié à ce compte — rattachez userId sur la fiche technicien',
+    );
+  }
+
+  private async upsertAttendanceSheet(
+    companyId: string,
+    technicianId: string,
+    dto: Omit<CreateAttendanceDto, 'technicianId'>,
+  ) {
     const weekStart = toMonday(dto.weekStart);
     let sheet = await this.attendanceRepository.findOne({
-      where: { companyId, technicianId: dto.technicianId, weekStart },
+      where: { companyId, technicianId, weekStart },
     });
     if (!sheet) {
       sheet = this.attendanceRepository.create({
         companyId,
-        technicianId: dto.technicianId,
+        technicianId,
         weekStart,
       });
     }

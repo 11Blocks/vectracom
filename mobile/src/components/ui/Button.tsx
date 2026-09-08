@@ -4,14 +4,13 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View,
   ViewStyle,
   TextStyle,
 } from 'react-native';
 import { colors, radius } from '../../theme/colors';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline' | 'ai';
-type Size = 'sm' | 'md' | 'lg';
+type Size = 'sm' | 'md' | 'lg' | 'icon';
 
 type Props = {
   children: React.ReactNode;
@@ -43,14 +42,21 @@ export function Button({
         styles.base,
         sizeStyles[size],
         variantStyles[variant],
-        pressed && !isDisabled && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+        pressed && !isDisabled && pressedStyles[variant],
         isDisabled && { opacity: 0.5 },
         style,
       ]}
     >
-      {loading && <ActivityIndicator color={variant === 'ai' ? colors.bg : colors.white} style={{ marginRight: 8 }} />}
+      {loading && (
+        <ActivityIndicator
+          color={variant === 'ai' ? colors.bg : colors.white}
+          style={{ marginRight: size === 'icon' ? 0 : 8 }}
+        />
+      )}
       {typeof children === 'string' ? (
-        <Text style={[styles.text, textVariants[variant], textStyle]}>{children}</Text>
+        <Text style={[styles.text, textVariants[variant], size === 'sm' && { fontSize: 12 }, textStyle]}>
+          {children}
+        </Text>
       ) : (
         children
       )}
@@ -72,6 +78,7 @@ const sizeStyles: Record<Size, ViewStyle> = {
   sm: { height: 36, paddingHorizontal: 12 },
   md: { height: 44, paddingHorizontal: 16 },
   lg: { height: 52, paddingHorizontal: 20 },
+  icon: { height: 44, width: 44, paddingHorizontal: 0 },
 };
 
 const variantStyles: Record<Variant, ViewStyle> = {
@@ -81,6 +88,15 @@ const variantStyles: Record<Variant, ViewStyle> = {
   ghost: { backgroundColor: 'transparent' },
   outline: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   ai: { backgroundColor: colors.amber },
+};
+
+const pressedStyles: Record<Variant, ViewStyle> = {
+  primary: { backgroundColor: colors.primaryHover, transform: [{ scale: 0.98 }] },
+  secondary: { backgroundColor: colors.accent, transform: [{ scale: 0.98 }] },
+  danger: { backgroundColor: colors.dangerHover, transform: [{ scale: 0.98 }] },
+  ghost: { backgroundColor: colors.accent, transform: [{ scale: 0.98 }] },
+  outline: { backgroundColor: colors.accent, transform: [{ scale: 0.98 }] },
+  ai: { backgroundColor: colors.amberHover, transform: [{ scale: 0.98 }] },
 };
 
 const textVariants: Record<Variant, TextStyle> = {

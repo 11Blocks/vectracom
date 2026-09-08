@@ -3,8 +3,11 @@ import { api, uploadFile } from '../services/api';
 
 const QUEUE_KEY = 'vectracom_offline_queue';
 const MISSION_SYNC_KEY = 'vectracom_mission_sync';
+const PURGE_KEY = 'vectracom_photo_purge';
+const MAX_ATTEMPTS = 3;
+const PHOTO_TTL_MS = 48 * 60 * 60 * 1000;
 
-export type QueueStatus = 'pending' | 'uploading' | 'success' | 'failed';
+export type QueueStatus = 'pending' | 'uploading' | 'success' | 'failed' | 'dead';
 
 export type QueueItem = {
   id: string;
@@ -17,9 +20,13 @@ export type QueueItem = {
   error?: string;
   createdAt: string;
   missionId?: string;
+  attempts?: number;
+  syncedAt?: string;
 };
 
 export type MissionSyncState = 'idle' | 'pending_sync' | 'synced' | 'failed';
+
+type PurgeEntry = { uri: string; syncedAt: string };
 
 async function readQueue(): Promise<QueueItem[]> {
   const raw = await AsyncStorage.getItem(QUEUE_KEY);
@@ -47,6 +54,20 @@ async function readMissionSync(): Promise<Record<string, MissionSyncState>> {
 
 async function writeMissionSync(map: Record<string, MissionSyncState>) {
   await AsyncStorage.setItem(MISSION_SYNC_KEY, JSON.stringify(map));
+}
+
+async function readPurge(): Promise<PurgeEntry[]> {
+  const raw = await AsyncStorage.getItem(PURGE_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as PurgeEntry[];
+  } catch {
+    return [];
+  }
+}
+
+async function writePurge(entries: PurgeEntry[]) {
+  await AsyncStorage.setItem(PURGE_KEY, JSON.stringify(entries));
 }
 
 export async function getMissionSyncState(missionId: string): Promise<MissionSyncState> {
@@ -98,12 +119,44 @@ function isLocalUri(uri: string) {
   return !!uri && !/^https?:\/\//i.test(uri);
 }
 
-export async function enqueue(item: Omit<QueueItem, 'id' | 'status' | 'createdAt' | 'error'>): Promise<QueueItem> {
+async function schedulePhotoPurge(uris: string[]) {
+  const local = uris.filter(isLocalUri);
+  if (!local.length) return;
+  const list = await readPurge();
+  const now = new Date().toISOString();
+  for (const uri of local) {
+    if (!list.some((e) => e.uri === uri)) list.push({ uri, syncedAt: now });
+  }
+  await writePurge(list);
+}
+
+/** Purge métadonnées + best-effort delete après 48 h post-sync. */
+export async function purgeSyncedPhotos(): Promise<number> {
+  const list = await readPurge();
+  if (!list.length) return 0;
+  const cutoff = Date.now() - PHOTO_TTL_MS;
+  const keep: PurgeEntry[] = [];
+  let purged = 0;
+  for (const e of list) {
+    const t = Date.parse(e.syncedAt);
+    if (!Number.isFinite(t) || t > cutoff) {
+      keep.push(e);
+      continue;
+    }
+    purged++;
+    // Best-effort : pas de expo-file-system — l’OS recycle le cache caméra.
+  }
+  await writePurge(keep);
+  return purged;
+}
+
+export async function enqueue(item: Omit<QueueItem, 'id' | 'status' | 'createdAt' | 'error' | 'attempts'>): Promise<QueueItem> {
   const full: QueueItem = {
     ...item,
     id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     status: 'pending',
     createdAt: new Date().toISOString(),
+    attempts: 0,
   };
   const q = await readQueue();
   q.push(full);
@@ -121,23 +174,35 @@ export async function pendingCount(): Promise<number> {
   return q.filter((i) => i.status === 'pending' || i.status === 'failed').length;
 }
 
-/** Flush : ne rejoue que pending/failed ; photos déjà success ne sont pas re-uploadées. */
-export async function flushQueue(): Promise<{ ok: number; failed: number }> {
+/** Flush : retry max 3 ; photos déjà success ne sont pas re-uploadées. */
+export async function flushQueue(): Promise<{ ok: number; failed: number; dead: number }> {
+  await purgeSyncedPhotos();
   const q = await readQueue();
   let ok = 0;
   let failed = 0;
+  let dead = 0;
 
   for (let i = 0; i < q.length; i++) {
     const item = q[i];
-    if (item.status === 'success') continue;
+    if (item.status === 'success' || item.status === 'dead') continue;
     if (item.status !== 'pending' && item.status !== 'failed') continue;
+    if ((item.attempts ?? 0) >= MAX_ATTEMPTS) {
+      item.status = 'dead';
+      item.error = item.error || `Abandon après ${MAX_ATTEMPTS} tentatives`;
+      dead++;
+      if (item.missionId) await setMissionSyncState(item.missionId, 'failed');
+      await writeQueue(q);
+      continue;
+    }
 
     item.status = 'uploading';
+    item.attempts = (item.attempts ?? 0) + 1;
     await writeQueue(q);
 
     try {
       let body = JSON.parse(JSON.stringify(item.body)) as Record<string, unknown>;
       const uploaded = new Map<string, string>();
+      const originalLocals: string[] = [];
 
       for (const file of item.localFiles ?? []) {
         const uri = file.uri;
@@ -146,14 +211,14 @@ export async function flushQueue(): Promise<{ ok: number; failed: number }> {
           setByPath(body, file.jsonPath, uri);
           continue;
         }
-        // Ne re-uploade pas une URI déjà traitée dans cette passe
+        originalLocals.push(uri);
         if (uploaded.has(uri)) {
           setByPath(body, file.jsonPath, uploaded.get(uri)!);
           continue;
         }
         const url = await uploadFile(uri, file.category ?? 'missions');
         uploaded.set(uri, url);
-        file.uri = url; // état success local — évite doublon au prochain flush
+        file.uri = url;
         setByPath(body, file.jsonPath, url);
       }
 
@@ -165,6 +230,8 @@ export async function flushQueue(): Promise<{ ok: number; failed: number }> {
 
       item.status = 'success';
       item.error = undefined;
+      item.syncedAt = new Date().toISOString();
+      await schedulePhotoPurge(originalLocals);
       ok++;
       if (item.missionId) {
         const still = q.some(
@@ -176,9 +243,15 @@ export async function flushQueue(): Promise<{ ok: number; failed: number }> {
         if (!still) await setMissionSyncState(item.missionId, 'synced');
       }
     } catch (e: any) {
-      item.status = 'failed';
-      item.error = e?.message ?? 'Erreur sync';
-      failed++;
+      if ((item.attempts ?? 0) >= MAX_ATTEMPTS) {
+        item.status = 'dead';
+        item.error = e?.message ?? 'Erreur sync';
+        dead++;
+      } else {
+        item.status = 'failed';
+        item.error = e?.message ?? 'Erreur sync';
+        failed++;
+      }
       if (item.missionId) await setMissionSyncState(item.missionId, 'failed');
     }
     await writeQueue(q);
@@ -191,7 +264,7 @@ export async function flushQueue(): Promise<{ ok: number; failed: number }> {
   ];
   await writeQueue(keep);
 
-  return { ok, failed };
+  return { ok, failed, dead };
 }
 
 let flushTimer: ReturnType<typeof setInterval> | null = null;

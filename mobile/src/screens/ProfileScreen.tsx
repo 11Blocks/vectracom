@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, Screen } from '../components/ui';
-import { colors } from '../theme/colors';
+import { Avatar, Button, Card, Screen } from '../components/ui';
+import { colors, spacing } from '../theme/colors';
 import { AuthUser, getUser, logout } from '../services/api';
 import { pendingCount } from '../offline/queue';
 import { isBackgroundTrackingRunning } from '../tracking/background';
@@ -29,16 +29,34 @@ export function ProfileScreen({ onLogout }: { onLogout: () => void }) {
   return (
     <Screen title="Mon espace" subtitle={user?.companyName || undefined}>
       <Card style={styles.card}>
-        <Text style={styles.name}>{user?.fullName || '—'}</Text>
-        <Text style={styles.meta}>{user?.email}</Text>
-        <Text style={styles.meta}>Rôle · {user?.role}</Text>
+        <View style={styles.head}>
+          <Avatar name={user?.fullName} size={52} />
+          <View style={styles.headText}>
+            <Text style={styles.name}>{user?.fullName || '—'}</Text>
+            <Text style={styles.meta}>{user?.email}</Text>
+            <Text style={styles.meta}>Rôle · {user?.role}</Text>
+          </View>
+        </View>
         <Text style={styles.meta}>File offline · {pending} élément(s)</Text>
         <Text style={styles.meta}>{gpsLabel}</Text>
       </Card>
 
       <Button onPress={() => nav.navigate('Presence')}>Présence hebdo</Button>
-      <Button variant="outline" onPress={() => nav.navigate('Expense', {})}>Dépense rapide</Button>
-      <Button variant="outline" onPress={() => nav.navigate('Incident', {})}>Incident GPS</Button>
+      <Button variant="outline" onPress={() => nav.navigate('VehicleCheck', {})}>
+        Checklist véhicule (15 s)
+      </Button>
+      <Button variant="outline" onPress={() => nav.navigate('Leave')}>
+        Congé rapide
+      </Button>
+      <Button variant="outline" onPress={() => nav.navigate('Expense', {})}>
+        Dépense rapide
+      </Button>
+      <Button variant="outline" onPress={() => nav.navigate('Incident', {})}>
+        Incident GPS
+      </Button>
+      <Button variant="outline" onPress={() => nav.navigate('Settings')}>
+        Réglages
+      </Button>
       <Button
         variant="danger"
         onPress={async () => {
@@ -53,7 +71,9 @@ export function ProfileScreen({ onLogout }: { onLogout: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 4 },
+  card: { gap: spacing.sm },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headText: { flex: 1, gap: 2 },
   name: { fontSize: 16, fontWeight: '700', color: colors.text },
   meta: { fontSize: 12, color: colors.muted },
 });

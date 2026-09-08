@@ -47,7 +47,6 @@ import { Step5EchangeSavDto } from './dto/field-report-step5-echange-sav.dto';
 import { Step6ClotureDto } from './dto/field-report-step6-cloture.dto';
 import { FieldReportDataDto } from './dto/field-report-data.dto';
 import { MISSION_STATUSES } from './entities/mission.entity';
-import { BadRequestException } from '@nestjs/common';
 
 class StepBodyDto {
   // Chaque clé porte un décorateur de validation : sans lui, le whitelist

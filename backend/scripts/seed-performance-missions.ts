@@ -139,7 +139,11 @@ async function seed() {
   const existingRes = await client.query<{ company_id: string; sonatel_dossier_number: string }>(
     "SELECT company_id, sonatel_dossier_number FROM missions WHERE sonatel_dossier_number LIKE 'SEED-PERF-%'",
   );
-  const existingKeys = new Set(existingRes.rows.map((r) => `${r.company_id}|${r.sonatel_dossier_number}`));
+  const existingKeys = new Set(
+    existingRes.rows.map((r: { company_id: string; sonatel_dossier_number: string }) =>
+      `${r.company_id}|${r.sonatel_dossier_number}`,
+    ),
+  );
 
   let created = 0;
   let skipped = 0;

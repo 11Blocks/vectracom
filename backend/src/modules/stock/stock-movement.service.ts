@@ -21,6 +21,8 @@ const REQUIREMENTS: Record<MovementType, { from: boolean; to: boolean }> = {
   echange_sav: { from: false, to: false },
   ajustement: { from: false, to: true },
   retour: { from: false, to: true },
+  // Sortie ferraillerie : matériel hors d'usage quitte le stock (dépôt → hors).
+  sortie_feraillerie: { from: true, to: false },
 };
 
 @Injectable()

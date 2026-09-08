@@ -1,14 +1,28 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { HrService } from './hr.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
+import { SaveAttendanceMeDto } from './dto/save-attendance-me.dto';
 import { EMPLOYEE_STATUSES } from './entities/employee.entity';
 import { LEAVE_STATUSES } from './entities/leave-request.entity';
 import { CANDIDATE_STATUSES, CANDIDATE_POSITIONS, CANDIDATE_SOURCES } from './entities/recruitment-candidate.entity';
+
+class LeaveMeDto {
+  @IsDateString()
+  startDate!: string;
+
+  @IsDateString()
+  endDate!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  reason?: string;
+}
 
 class ListEmployeesQueryDto {
   @IsOptional() @IsString() teamId?: string;
@@ -229,6 +243,26 @@ export class HrController {
 
   // ------------------- Congés -------------------
 
+  @Get('leave-requests/me')
+  myLeaves(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('fullName') fullName: string,
+  ) {
+    this.requireTenant(companyId);
+    return this.hrService.listMyLeaveRequests(companyId!, fullName || '');
+  }
+
+  /** Demande rapide depuis le mobile (sans choisir employeeId). */
+  @Post('leave-requests/me')
+  createLeaveMe(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('fullName') fullName: string,
+    @Body() dto: LeaveMeDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.hrService.createLeaveRequestForUser(companyId!, fullName || 'Employé', dto);
+  }
+
   @Get('leave-requests')
   leaveRequests(@CurrentUser('companyId') companyId: string | null, @Query() query: ListLeaveQueryDto) {
     this.requireTenant(companyId);
@@ -275,6 +309,19 @@ export class HrController {
   saveAttendance(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateAttendanceDto) {
     this.requireTenant(companyId);
     return this.hrService.saveAttendance(companyId!, dto);
+  }
+
+  /** Mobile : présence du technicien lié au JWT (pas de technicianId client). */
+  @Post('attendance/me')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
+  saveAttendanceMe(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('fullName') fullName: string | null,
+    @Body() dto: SaveAttendanceMeDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.hrService.saveAttendanceForUser(companyId!, userId, fullName, dto);
   }
 
   @Put('attendance/:id/validate')

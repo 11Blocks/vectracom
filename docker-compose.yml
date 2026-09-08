@@ -53,6 +53,40 @@ services:
     ports:
       - "${BACKEND_PORT:-3000}:3000"
 
+  # Matrix Dendrite (optionnel) — docker compose --profile matrix up -d
+  # Backend .env : MATRIX_HOMESERVER=http://localhost:8008
+  # Sans ça, le chat Nest (Postgres) fonctionne déjà.
+  dendrite:
+    profiles: ["matrix"]
+    image: matrixdotorg/dendrite-monolith:latest
+    container_name: vectracom-dendrite
+    volumes:
+      - ./infra/dendrite:/etc/dendrite
+      - dendritedata:/var/dendrite
+    ports:
+      - "${DENDRITE_PORT:-8008}:8008"
+    entrypoint: ["/usr/bin/dendrite"]
+    command: ["--config=/etc/dendrite/dendrite.yaml"]
+    restart: unless-stopped
+
+  # WhatsApp Remontée bridge (optionnel) — docker compose --profile remontee up -d
+  # Prérequis : profil matrix (Dendrite) + login QR mautrix (voir infra/mautrix-whatsapp/README.md).
+  # Le bridge Matrix ↔ WhatsApp ; le forward vers Nest se fait via POST /api/v1/remontee/ingest
+  # (secret REMONTEE_BRIDGE_SECRET). Sans mautrix, utiliser POST /remontee/simulate (admin JWT).
+  mautrix-whatsapp:
+    profiles: ["remontee"]
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    container_name: vectracom-mautrix-whatsapp
+    depends_on:
+      - postgres
+    volumes:
+      - ./infra/mautrix-whatsapp:/data
+    environment:
+      # Config lue depuis /data/config.yaml (générée au premier run, voir README)
+      TZ: Africa/Dakar
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
+  dendritedata:

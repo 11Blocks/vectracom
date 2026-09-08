@@ -185,6 +185,7 @@ export class NotificationsService {
       stock: settings.stockAlertEnabled,
       incident: settings.incidentAlertEnabled,
       paiement: settings.paymentAlertEnabled,
+      chat: true,
       test: true,
     };
     if (type in map && !map[type]) throw new BadRequestException(`Type ${type} désactivé dans les paramètres du tenant`);

@@ -9,9 +9,9 @@
     "splash": { "backgroundColor": "#0f9d70", "resizeMode": "contain" },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "sn.green-t.vectracom",
+      "bundleIdentifier": "sn.greent.vectracom",
       "infoPlist": {
-        "NSCameraUsageDescription": "Photos de preuve pour les missions",
+        "NSCameraUsageDescription": "Photos de preuve et scan des numéros de série / QR codes stock",
         "NSLocationWhenInUseUsageDescription": "GPS pour la géolocalisation des interventions et le suivi terrain",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "GPS en arrière-plan pour le suivi des équipes terrain même quand l'app est fermée",
         "NSLocationAlwaysUsageDescription": "GPS en arrière-plan pour le suivi des équipes terrain",
@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "package": "sn.green-t.vectracom",
+      "package": "sn.greent.vectracom",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
@@ -27,10 +27,12 @@
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "VIBRATE"
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
+      "expo-dev-client",
       "expo-camera",
       [
         "expo-location",
@@ -40,9 +42,20 @@
           "isIosBackgroundLocationEnabled": true
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0f9d70"
+        }
+      ],
       "expo-task-manager"
     ],
-    "extra": { "apiUrl": "http://192.168.1.27:3100/api/v1" }
+    "extra": {
+      "apiUrl": "http://192.168.1.27:3100/api/v1",
+      "eas": {
+        "projectId": ""
+      }
+    }
   }
 }

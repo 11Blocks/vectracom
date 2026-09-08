@@ -6,6 +6,7 @@ import {
   IsLongitude,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   MinLength,
 } from 'class-validator';
@@ -56,4 +57,7 @@ export class CreateIncidentDto {
   /** Texte brut du message WhatsApp (pour l'analyse IA). */
   @IsOptional() @IsString() annotationOriginale?: string;
   @IsOptional() @IsArray() photos?: Array<{ type: string; url: string }>;
+
+  /** Missions liées (mobile : signalement depuis une mission). */
+  @IsOptional() @IsArray() @IsUUID('4', { each: true }) relatedMissionIds?: string[];
 }

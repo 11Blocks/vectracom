@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Badge, Button, Card, Screen } from '../components/ui';
 import { colors, spacing } from '../theme/colors';
-import { getMission, Mission, resolveTemplateKey } from '../services/missions';
+import { getMission, Mission, resolveTemplateKey, updateMissionStatus } from '../services/missions';
 import { getMissionSyncState, MissionSyncState } from '../offline/queue';
+import { chatRoomForMission } from '../services/chat';
 
 export function MissionDetailScreen() {
   const route = useRoute<any>();
@@ -13,22 +14,66 @@ export function MissionDetailScreen() {
   const [mission, setMission] = useState<Mission | null>(null);
   const [sync, setSync] = useState<MissionSyncState>('idle');
   const [loading, setLoading] = useState(true);
+  const [closing, setClosing] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const [m, s] = await Promise.all([getMission(id), getMissionSyncState(id)]);
+      setMission(m);
+      setSync(s);
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message ?? 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const [m, s] = await Promise.all([getMission(id), getMissionSyncState(id)]);
-        setMission(m);
-        setSync(s);
-      } catch (e: any) {
-        setError(e?.message ?? 'Erreur');
-      } finally {
-        setLoading(false);
-      }
-    })();
+    reload();
   }, [id]);
+
+  const openSalon = async (missionRoom?: boolean) => {
+    setOpeningChat(true);
+    try {
+      const room = await chatRoomForMission(mission!.id, { missionRoom });
+      nav.navigate('Conversation', { roomId: room.roomId, title: room.title });
+    } catch (e: any) {
+      Alert.alert('Salon', e?.message || 'Impossible d’ouvrir le salon');
+    } finally {
+      setOpeningChat(false);
+    }
+  };
+
+  const closeMission = () => {
+    Alert.alert('Clôturer', 'Passer la mission en « terminee » ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Clôturer',
+        style: 'destructive',
+        onPress: async () => {
+          setClosing(true);
+          try {
+            let current = mission.status;
+            if (current === 'planifiee' || current === 'a_completer') {
+              await updateMissionStatus(id, 'en_cours');
+              current = 'en_cours';
+            }
+            const updated = await updateMissionStatus(id, 'terminee');
+            setMission(updated);
+            Alert.alert('OK', 'Mission clôturée');
+          } catch (e: any) {
+            Alert.alert('Clôture', e?.message || 'Transition refusée');
+          } finally {
+            setClosing(false);
+          }
+        },
+      },
+    ]);
+  };
 
   if (loading) {
     return (
@@ -47,6 +92,7 @@ export function MissionDetailScreen() {
   }
 
   const templateKey = resolveTemplateKey(mission.typeTache);
+  const canClose = mission.status === 'en_cours' || mission.status === 'planifiee' || mission.status === 'a_completer';
 
   return (
     <Screen title={mission.clientSite || 'Mission'} subtitle={mission.sonatelDossierNumber || undefined}>
@@ -71,8 +117,37 @@ export function MissionDetailScreen() {
       <Button onPress={() => nav.navigate('MissionForm', { id: mission.id })}>
         Ouvrir le formulaire
       </Button>
+      <Button variant="outline" onPress={() => nav.navigate('MissionConso', { id: mission.id })}>
+        Conso matériel
+      </Button>
+      <Button
+        variant="outline"
+        onPress={() => nav.navigate('StockScan', { missionId: mission.id })}
+      >
+        Scanner QR / série
+      </Button>
+      {canClose ? (
+        <Button variant="secondary" loading={closing} onPress={closeMission}>
+          Clôturer la mission
+        </Button>
+      ) : null}
       <Button variant="outline" onPress={() => nav.navigate('Incident', { missionId: mission.id, zone: mission.zone })}>
         Signaler un incident
+      </Button>
+      <Button variant="outline" loading={openingChat} onPress={() => openSalon(false)}>
+        Salon équipe
+      </Button>
+      <Button variant="outline" loading={openingChat} onPress={() => openSalon(true)}>
+        Salon mission (opt-in)
+      </Button>
+      <Button
+        variant="outline"
+        onPress={() => nav.navigate('VehicleCheck', { missionId: mission.id })}
+      >
+        Checklist véhicule
+      </Button>
+      <Button variant="outline" onPress={() => nav.navigate('VocalAssist', { missionId: mission.id })}>
+        Commande vocale
       </Button>
       <Button variant="secondary" onPress={() => nav.navigate('Expense', { missionId: mission.id })}>
         Dépense rapide

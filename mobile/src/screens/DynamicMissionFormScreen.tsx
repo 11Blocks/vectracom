@@ -11,13 +11,14 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { Badge, Button, Card, Input, Screen, Stepper } from '../components/ui';
+import { Badge, Button, Card, ChipGroup, Input, Screen, Stepper } from '../components/ui';
 import { colors, spacing } from '../theme/colors';
 import {
   getMission,
   getTemplateForMission,
   MissionTemplate,
   saveFieldReportData,
+  saveMissionMaterials,
   TemplateStep,
   TemplateStepField,
 } from '../services/missions';
@@ -38,6 +39,13 @@ function validateStep(step: TemplateStep, answers: Answers): string | null {
       continue;
     }
     if (f.type === 'checklist') {
+      if (f.id === 'materialsConsumed') {
+        const lines = Array.isArray(v) ? v : [];
+        if (lines.length === 0 || !lines.some((l: any) => l.designation && Number(l.quantity) > 0)) {
+          return `Conso matériel requise : ${f.label}`;
+        }
+        continue;
+      }
       const opts = f.options || [];
       const checked = (v as Record<string, boolean>) || {};
       if (opts.some((o) => !checked[o])) return `Checklist incomplète : ${f.label}`;
@@ -110,6 +118,16 @@ export function DynamicMissionFormScreen() {
       const payload = { data: { data: nextAnswers } };
       try {
         await saveFieldReportData(missionId, nextAnswers);
+        if (Array.isArray(nextAnswers.materialsConsumed)) {
+          const materials = (nextAnswers.materialsConsumed as any[])
+            .filter((l) => l?.designation && Number(l.quantity) > 0)
+            .map((l, i) => ({
+              itemNumber: l.itemNumber ?? i + 1,
+              designation: String(l.designation),
+              quantity: Number(l.quantity),
+            }));
+          if (materials.length) await saveMissionMaterials(missionId, materials);
+        }
         setPendingLocal(false);
       } catch {
         const localFiles = collectLocalFiles(nextAnswers);
@@ -231,22 +249,79 @@ function FieldEditor({
     return (
       <View style={styles.fieldGap}>
         <Text style={styles.fieldLabel}>{field.label}{field.required ? ' *' : ''}</Text>
-        <View style={styles.chips}>
-          {(field.options || []).map((opt) => (
-            <Pressable
-              key={opt}
-              onPress={() => onChange(opt)}
-              style={[styles.chip, value === opt && styles.chipOn]}
-            >
-              <Text style={[styles.chipText, value === opt && styles.chipTextOn]}>{opt}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <ChipGroup
+          options={field.options || []}
+          value={value}
+          onChange={onChange}
+        />
       </View>
     );
   }
 
   if (field.type === 'checklist') {
+    // Bordereau conso : checklist générique → lignes qté (M5)
+    if (field.id === 'materialsConsumed') {
+      const lines: Array<{ designation: string; quantity: string }> = Array.isArray(value)
+        ? value.map((l: any) => ({
+            designation: String(l.designation ?? l.label ?? ''),
+            quantity: String(l.quantity ?? 1),
+          }))
+        : [{ designation: '', quantity: '1' }];
+      return (
+        <View style={styles.fieldGap}>
+          <Text style={styles.fieldLabel}>{field.label}{field.required ? ' *' : ''}</Text>
+          {lines.map((l, i) => (
+            <View key={i} style={{ gap: 6 }}>
+              <Input
+                label={`Désignation ${i + 1}`}
+                value={l.designation}
+                onChangeText={(t) => {
+                  const next = [...lines];
+                  next[i] = { ...next[i], designation: t };
+                  onChange(
+                    next.map((x, idx) => ({
+                      itemNumber: idx + 1,
+                      designation: x.designation,
+                      quantity: Number(x.quantity) || 1,
+                    })),
+                  );
+                }}
+              />
+              <Input
+                label="Qté"
+                keyboardType="decimal-pad"
+                value={l.quantity}
+                onChangeText={(t) => {
+                  const next = [...lines];
+                  next[i] = { ...next[i], quantity: t };
+                  onChange(
+                    next.map((x, idx) => ({
+                      itemNumber: idx + 1,
+                      designation: x.designation,
+                      quantity: Number(x.quantity) || 1,
+                    })),
+                  );
+                }}
+              />
+            </View>
+          ))}
+          <Pressable
+            onPress={() =>
+              onChange([
+                ...lines.map((x, idx) => ({
+                  itemNumber: idx + 1,
+                  designation: x.designation,
+                  quantity: Number(x.quantity) || 1,
+                })),
+                { itemNumber: lines.length + 1, designation: '', quantity: 1 },
+              ])
+            }
+          >
+            <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 12 }}>+ Ligne</Text>
+          </Pressable>
+        </View>
+      );
+    }
     const checked: Record<string, boolean> = value || {};
     return (
       <View style={styles.fieldGap}>
@@ -312,18 +387,6 @@ const styles = StyleSheet.create({
   fieldGap: { gap: spacing.sm },
   fieldLabel: { fontSize: 12, fontWeight: '500', color: colors.muted },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardAlt,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  chipOn: { borderColor: colors.primary, backgroundColor: 'rgba(15,157,112,0.15)' },
-  chipText: { fontSize: 12, color: colors.muted },
-  chipTextOn: { color: colors.primary, fontWeight: '600' },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   box: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: colors.border },
   boxOn: { backgroundColor: colors.primary, borderColor: colors.primary },

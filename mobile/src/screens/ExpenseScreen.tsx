@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Image, StyleSheet, View } from 'react-native';
+import { Alert, Image, StyleSheet } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Button, Card, Input, Screen } from '../components/ui';
@@ -7,19 +7,38 @@ import { spacing } from '../theme/colors';
 import { createExpense } from '../services/ops';
 import { enqueue, flushQueue } from '../offline/queue';
 import { uploadFile } from '../services/api';
+import { extractReceipt } from '../services/ai';
 
 export function ExpenseScreen() {
   const route = useRoute<any>();
   const missionId = route.params?.missionId as string | undefined;
-  const [category, setCategory] = useState('divers');
-  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState(route.params?.category || 'divers');
+  const [amount, setAmount] = useState(route.params?.amount ? String(route.params.amount) : '');
   const [description, setDescription] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
 
   const pick = async () => {
     const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-    if (!res.canceled && res.assets[0]?.uri) setPhoto(res.assets[0].uri);
+    if (res.canceled || !res.assets[0]?.uri) return;
+    const uri = res.assets[0].uri;
+    setPhoto(uri);
+    setOcrLoading(true);
+    try {
+      const url = await uploadFile(uri, 'receipts');
+      const extracted = await extractReceipt(url);
+      if (extracted.amount != null) setAmount(String(extracted.amount));
+      if (extracted.category) setCategory(extracted.category);
+      Alert.alert(
+        'OCR reçu (proposition)',
+        `Montant ${extracted.amount ?? '—'} ${extracted.currency} · ${extracted.category} (conf. ${Math.round((extracted.confidence || 0) * 100)} %) — à valider`,
+      );
+    } catch {
+      // OCR optionnel : on garde la photo locale
+    } finally {
+      setOcrLoading(false);
+    }
   };
 
   const submit = async () => {
@@ -83,7 +102,9 @@ export function ExpenseScreen() {
         <Input label="Montant (FCFA) *" keyboardType="numeric" value={amount} onChangeText={setAmount} />
         <Input label="Description" value={description} onChangeText={setDescription} />
         {photo ? <Image source={{ uri: photo }} style={styles.preview} /> : null}
-        <Button variant="outline" onPress={pick}>{photo ? 'Reprendre reçu' : 'Photo reçu'}</Button>
+        <Button variant="outline" loading={ocrLoading} onPress={pick}>
+          {photo ? 'Reprendre reçu (+ OCR)' : 'Photo reçu (+ OCR)'}
+        </Button>
         <Button loading={loading} onPress={submit}>Enregistrer</Button>
       </Card>
     </Screen>

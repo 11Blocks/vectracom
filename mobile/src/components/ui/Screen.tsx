@@ -1,5 +1,13 @@
 import React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import {
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { colors, spacing } from '../../theme/colors';
 
@@ -10,6 +18,8 @@ export function Screen({
   scroll = true,
   right,
   style,
+  refreshing,
+  onRefresh,
 }: {
   children: React.ReactNode;
   title?: string;
@@ -17,9 +27,24 @@ export function Screen({
   scroll?: boolean;
   right?: React.ReactNode;
   style?: ViewStyle;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }) {
   const body = scroll ? (
-    <ScrollView contentContainerStyle={[styles.content, style]} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      contentContainerStyle={[styles.content, style]}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        ) : undefined
+      }
+    >
       {children}
     </ScrollView>
   ) : (

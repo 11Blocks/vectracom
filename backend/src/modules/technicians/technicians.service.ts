@@ -72,6 +72,40 @@ export class TechniciansService {
     return technician;
   }
 
+  /**
+   * Résout le technicien du JWT (lien userId, sinon homonyme, sinon 1er chef actif).
+   * Même logique que la géoloc mobile — pour présence / profil terrain.
+   */
+  async findMe(companyId: string, userId: string, userFullName?: string | null): Promise<Technician> {
+    const linked = await this.technicianRepository.findOne({
+      where: { companyId, userId, active: true },
+      relations: ['team'],
+    });
+    if (linked) return linked;
+
+    if (userFullName?.trim()) {
+      const byName = await this.technicianRepository
+        .createQueryBuilder('t')
+        .leftJoinAndSelect('t.team', 'team')
+        .where('t.company_id = :cid AND t.active = true', { cid: companyId })
+        .andWhere('LOWER(t.full_name) = LOWER(:name)', { name: userFullName.trim() })
+        .orderBy('t.is_team_leader', 'DESC')
+        .getOne();
+      if (byName) return byName;
+    }
+
+    const leader = await this.technicianRepository.findOne({
+      where: { companyId, active: true, isTeamLeader: true },
+      relations: ['team'],
+      order: { createdAt: 'ASC' },
+    });
+    if (leader) return leader;
+
+    throw new NotFoundException(
+      'Aucun technicien lié à ce compte — rattachez userId sur la fiche technicien',
+    );
+  }
+
   async byTeam(companyId: string, teamId: string): Promise<Technician[]> {
     await this.teamRepository.findOne({ where: { companyId, id: teamId } }).then((t) => {
       if (!t) throw new NotFoundException('Équipe introuvable');

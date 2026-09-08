@@ -28,6 +28,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AiModule } from './modules/ai/ai.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { FilesModule } from './modules/files/files.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { HealthController } from './modules/health.controller';
 
 @Module({
@@ -72,6 +73,7 @@ import { HealthController } from './modules/health.controller';
     AiModule,
     SettingsModule,
     FilesModule,
+    ChatModule,
   ],
   controllers: [HealthController],
 })

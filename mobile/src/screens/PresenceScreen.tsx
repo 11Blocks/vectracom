@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import { Button, Card, Screen } from '../components/ui';
 import { colors, spacing } from '../theme/colors';
-import { getUser } from '../services/api';
 import { saveAttendance } from '../services/ops';
 import { enqueue, flushQueue } from '../offline/queue';
 
@@ -28,29 +27,23 @@ export function PresenceScreen() {
     monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false,
   });
   const [loading, setLoading] = useState(false);
-  const [technicianId, setTechnicianId] = useState<string | null>(null);
   const weekStart = mondayOf();
 
-  useEffect(() => {
-    getUser().then((u) => {
-      // MVP : utilise l'id user comme proxy si pas de technicianId dédié
-      setTechnicianId(u?.id ?? null);
-    });
-  }, []);
-
   const submit = async () => {
-    if (!technicianId) {
-      Alert.alert('Profil', 'Utilisateur non identifié');
-      return;
-    }
     setLoading(true);
-    const payload = { technicianId, weekStart, ...days };
+    const payload = { weekStart, ...days };
     try {
       try {
         await saveAttendance(payload);
         Alert.alert('Présence enregistrée', `Semaine du ${weekStart}`);
-      } catch {
-        await enqueue({ method: 'POST', path: '/attendance', body: payload });
+      } catch (e: any) {
+        const msg = e?.message || '';
+        // Erreur métier (pas de technicien) → ne pas mettre en file
+        if (/technicien/i.test(msg)) {
+          Alert.alert('Présence', msg);
+          return;
+        }
+        await enqueue({ method: 'POST', path: '/attendance/me', body: payload });
         flushQueue().catch(() => undefined);
         Alert.alert('Hors-ligne', 'Présence en file de sync.');
       }

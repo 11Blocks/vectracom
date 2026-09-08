@@ -30,10 +30,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: 'rgba(10,15,13,0.6)',
+    backgroundColor: colors.inputBg,
     color: colors.text,
     fontSize: 14,
   },
-  inputError: { borderColor: 'rgba(192,57,43,0.5)' },
+  inputError: { borderColor: colors.dangerSoft50 },
   error: { fontSize: 11, color: colors.danger },
 });

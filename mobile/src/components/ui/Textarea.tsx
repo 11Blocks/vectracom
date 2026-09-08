@@ -1,0 +1,47 @@
+import React from 'react';
+import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import { colors, radius, spacing } from '../../theme/colors';
+
+type Props = TextInputProps & {
+  label?: string;
+  error?: string;
+  minHeight?: number;
+};
+
+export function Textarea({ label, error, minHeight = 96, style, ...props }: Props) {
+  return (
+    <View style={styles.wrap}>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
+      <TextInput
+        {...props}
+        multiline
+        textAlignVertical="top"
+        placeholderTextColor={colors.muted}
+        style={[
+          styles.input,
+          { minHeight },
+          error ? styles.inputError : null,
+          style,
+        ]}
+      />
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { gap: 6 },
+  label: { fontSize: 12, fontWeight: '500', color: colors.muted },
+  input: {
+    backgroundColor: colors.inputBgStrong,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 14,
+  },
+  inputError: { borderColor: colors.dangerSoft50 },
+  error: { fontSize: 11, color: colors.danger },
+});

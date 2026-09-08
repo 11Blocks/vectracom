@@ -1,17 +1,20 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { StatusTone, statusColors } from '../../theme/colors';
+import { StatusTone, statusColors, radius } from '../../theme/colors';
 
 export function Badge({
   children,
   tone = 'neutral',
+  /** Alias web API. */
+  variant,
   style,
 }: {
   children: React.ReactNode;
   tone?: StatusTone;
+  variant?: StatusTone;
   style?: ViewStyle;
 }) {
-  const c = statusColors[tone];
+  const c = statusColors[variant || tone];
   return (
     <View style={[styles.badge, { backgroundColor: c.bg, borderColor: c.border }, style]}>
       <Text style={[styles.text, { color: c.fg }]}>{children}</Text>
@@ -23,9 +26,9 @@ const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  text: { fontSize: 10, fontWeight: '600' },
+  text: { fontSize: 11, fontWeight: '600' },
 });
