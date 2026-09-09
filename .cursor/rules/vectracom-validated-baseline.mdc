@@ -1,0 +1,30 @@
+---
+description: VECTRACOM validated local baseline — data pipeline, accounts, VPS ports
+alwaysApply: true
+---
+
+# VECTRACOM — baseline validée (2026-09-09)
+
+## Stack & ports (ne pas casser TrackIT)
+- API `127.0.0.1:3100`, web `3101`, Postgres `5434`, Redis `6380`
+- VPS: `ubuntu@83.228.222.179`, app `/mnt/data/apps/Vectracom`, public https://vectracom.track-it.org
+- Deploy: exclure compose/env VPS ; DB Docker = `vectracom-postgres` ; `TYPEORM_SYNCHRONIZE=false`
+
+## Comptes
+- Admin ONECOMIT: `admin@onecomit.sn` / `ChangeMe!2026`
+- Super admin Green-T: `admin@green-t.sn` / `ChangeMe!2026`
+
+## Données — pipeline (ne pas vider sans accord)
+Sources Excel réelles :
+- `c:\Users\USER\Downloads\Planning global FTTH 30 07 2026.xlsx`
+- `c:\Users\USER\Documents\MYWORKSPACE\BABACAR\ATTACHEMENT ONCOMIT JUIN VF.xlsx`
+
+Scripts : `backend/scripts/fill-platform-pipeline.cjs` (plein), `scripts/seed-platform-demo-data.sql`, `scripts/align-demo-data.sql`
+Rejouer : `SKIP_PLANNING=1 node backend/scripts/fill-platform-pipeline.cjs`
+
+Baseline locale attendue après fill : ~759 missions, 80 incidents, FACT-202606-0001, field reports, RH journaliers, dispositif, chat, KPI 80, stock levels/serials, dépenses/caisse.
+
+## Règles agent
+- Remplir **toute** la plateforme (pipeline produit), pas 1–2 modules isolés
+- Valider d’abord en local ; redeploy VPS seulement après OK utilisateur
+- Ne pas réutiliser ports TrackIT (3000/5433…)
