@@ -76,6 +76,7 @@ services:
       context: ./web-admin
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3100/api/v1}
+        NEXT_PUBLIC_MAPTILER_KEY: ${NEXT_PUBLIC_MAPTILER_KEY:-}
     container_name: vectracom-web
     restart: unless-stopped
     depends_on:
