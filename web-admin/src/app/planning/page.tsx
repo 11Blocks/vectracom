@@ -103,7 +103,7 @@ function Content() {
     const y = m.getFullYear();
     const mo = m.getMonth();
     let c = 0;
-    for (const [k, list] of byDay) {
+    for (const [k, list] of Array.from(byDay.entries())) {
       const d = new Date(k);
       if (d.getFullYear() === y && d.getMonth() === mo) c += list.length;
     }
@@ -114,7 +114,7 @@ function Content() {
   const yearMissions = yearMonths.reduce((n, m) => {
     const mo = m.getMonth();
     let c = 0;
-    for (const [k, list] of byDay) {
+    for (const [k, list] of Array.from(byDay.entries())) {
       const d = new Date(k);
       if (d.getFullYear() === yearAnchor && d.getMonth() === mo) c += list.length;
     }

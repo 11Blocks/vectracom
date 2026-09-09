@@ -1,29 +1,35 @@
 services:
-  postgres:
+  # Service name = DNS Docker. Must NOT be "postgres" (TrackIT collision on shared nets).
+  vectracom-postgres:
     image: postgres:15-alpine
     container_name: vectracom-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vectracom}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vectracom_dev}
       POSTGRES_DB: ${POSTGRES_DB:-vectracom}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Host 5434 (never 5433 = TrackIT)
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5434}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
-      - ./infra/postgres/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./infra/postgres/docker-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vectracom}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
+    networks:
+      - vectracom-net
 
-  redis:
+  vectracom-redis:
     image: redis:7-alpine
     container_name: vectracom-redis
+    restart: unless-stopped
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Host 6380 (never 6379 if that risks conflict; VPS standard)
+      - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6380}:6379"
     volumes:
       - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - redisdata:/data
@@ -31,31 +37,59 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 15
+    networks:
+      - vectracom-net
 
   backend:
     build:
       context: ./backend
     container_name: vectracom-backend
+    restart: unless-stopped
     depends_on:
-      postgres:
+      vectracom-postgres:
         condition: service_healthy
-      redis:
+      vectracom-redis:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-vectracom}:${POSTGRES_PASSWORD:-vectracom_dev}@postgres:5432/${POSTGRES_DB:-vectracom}
-      REDIS_URL: redis://redis:6379
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "3000"
+      DATABASE_URL: postgres://${POSTGRES_USER:-vectracom}:${POSTGRES_PASSWORD:-vectracom_dev}@vectracom-postgres:5432/${POSTGRES_DB:-vectracom}
+      REDIS_URL: redis://vectracom-redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3101}
+      TYPEORM_SYNCHRONIZE: ${TYPEORM_SYNCHRONIZE:-false}
+      GREEN_T_ADMIN_EMAIL: ${GREEN_T_ADMIN_EMAIL:-admin@green-t.sn}
+      GREEN_T_ADMIN_PASSWORD: ${GREEN_T_ADMIN_PASSWORD:-ChangeMe!2026}
+      GREEN_T_ADMIN_NAME: ${GREEN_T_ADMIN_NAME:-Green-T Super Admin}
     ports:
-      - "${BACKEND_PORT:-3000}:3000"
+      # Host 3100 (never 3000 = TrackIT)
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-3100}:3000"
+    networks:
+      - vectracom-net
+
+  web-admin:
+    build:
+      context: ./web-admin
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3100/api/v1}
+    container_name: vectracom-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      PORT: "3001"
+      HOSTNAME: 0.0.0.0
+    ports:
+      # Host 3101
+      - "${WEB_BIND:-127.0.0.1}:${WEB_ADMIN_PORT:-3101}:3001"
+    networks:
+      - vectracom-net
 
   # Matrix Dendrite (optionnel) — docker compose --profile matrix up -d
-  # Backend .env : MATRIX_HOMESERVER=http://localhost:8008
-  # Sans ça, le chat Nest (Postgres) fonctionne déjà.
   dendrite:
     profiles: ["matrix"]
     image: matrixdotorg/dendrite-monolith:latest
@@ -64,27 +98,32 @@ services:
       - ./infra/dendrite:/etc/dendrite
       - dendritedata:/var/dendrite
     ports:
-      - "${DENDRITE_PORT:-8008}:8008"
+      - "${DENDRITE_BIND:-127.0.0.1}:${DENDRITE_PORT:-8008}:8008"
     entrypoint: ["/usr/bin/dendrite"]
     command: ["--config=/etc/dendrite/dendrite.yaml"]
     restart: unless-stopped
+    networks:
+      - vectracom-net
 
   # WhatsApp Remontée bridge (optionnel) — docker compose --profile remontee up -d
-  # Prérequis : profil matrix (Dendrite) + login QR mautrix (voir infra/mautrix-whatsapp/README.md).
-  # Le bridge Matrix ↔ WhatsApp ; le forward vers Nest se fait via POST /api/v1/remontee/ingest
-  # (secret REMONTEE_BRIDGE_SECRET). Sans mautrix, utiliser POST /remontee/simulate (admin JWT).
   mautrix-whatsapp:
     profiles: ["remontee"]
     image: dock.mau.dev/mautrix/whatsapp:latest
     container_name: vectracom-mautrix-whatsapp
     depends_on:
-      - postgres
+      - vectracom-postgres
     volumes:
       - ./infra/mautrix-whatsapp:/data
     environment:
-      # Config lue depuis /data/config.yaml (générée au premier run, voir README)
       TZ: Africa/Dakar
     restart: unless-stopped
+    networks:
+      - vectracom-net
+
+networks:
+  vectracom-net:
+    driver: bridge
+    name: vectracom_vectracom-net
 
 volumes:
   pgdata:

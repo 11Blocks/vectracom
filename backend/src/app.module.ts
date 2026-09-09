@@ -41,8 +41,14 @@ import { HealthController } from './modules/health.controller';
         url: config.get<string>('DATABASE_URL'),
         // Colonnes snake_case pour correspondre aux migrations SQL (infra/postgres/migrations)
         namingStrategy: new SnakeNamingStrategy(),
-        // En dev : synchro des entités ; en prod : migrations SQL
-        synchronize: config.get('NODE_ENV') !== 'production',
+        // Prod / VPS : SQL migrations only.
+        // Dev host : synchronize ON unless TYPEORM_SYNCHRONIZE=false (prod-like).
+        synchronize:
+          config.get('TYPEORM_SYNCHRONIZE') === 'true'
+            ? true
+            : config.get('TYPEORM_SYNCHRONIZE') === 'false'
+              ? false
+              : config.get('NODE_ENV') !== 'production',
         logging: config.get('DB_LOGGING') === 'true',
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
       }),
