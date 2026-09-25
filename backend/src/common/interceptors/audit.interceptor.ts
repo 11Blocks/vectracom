@@ -5,6 +5,19 @@ import { Request } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { JwtPayloadUser } from '../decorators/current-user.decorator';
 
+const SECRET_KEY = /pass(word)?|token|secret|otp|api[-_]?key/i;
+
+/** Masque récursivement toute clé ressemblant à un secret (mots de passe, jetons…). */
+function redactSecrets(value: unknown, depth = 0): unknown {
+  if (depth > 6 || value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => redactSecrets(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = SECRET_KEY.test(k) ? '***' : redactSecrets(v, depth + 1);
+  }
+  return out;
+}
+
 interface AuditRequest extends Request {
   user?: JwtPayloadUser;
   tenantId?: string | null;
@@ -47,11 +60,7 @@ export class AuditInterceptor implements NestInterceptor {
     error: string | null,
   ) {
     try {
-      const body = { ...request.body } as Record<string, unknown>;
-      delete body.password;
-      delete body.adminPassword;
-      delete body.newPassword;
-      delete body.passwordHash;
+      const body = redactSecrets(request.body) as Record<string, unknown>;
 
       await this.dataSource.query(
         `INSERT INTO audit_logs (id, company_id, user_id, action, entity_type, entity_id, payload, ip, created_at)
