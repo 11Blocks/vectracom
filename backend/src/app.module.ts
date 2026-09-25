@@ -4,6 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { UsersModule } from './modules/users/users.module';
+import { AuditModule } from './common/audit/audit.module';
 import { PlanningModule } from './modules/planning/planning.module';
 import { MissionsModule } from './modules/missions/missions.module';
 import { TeamsModule } from './modules/teams/teams.module';
@@ -53,8 +55,10 @@ import { HealthController } from './modules/health.controller';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
       }),
     }),
+    AuditModule,
     AuthModule,
     TenantsModule,
+    UsersModule,
     PlanningModule,
     MissionsModule,
     TeamsModule,

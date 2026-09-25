@@ -380,22 +380,33 @@ export const complianceService = {
 //  SAAS
 // ═══════════════════════════════════════════════════════════
 
+/** Console Green-T : les routes SaaS ciblent un tenant via ?companyId= (ignoré côté tenant). */
+const tq = (companyId?: string, extra?: Record<string, string>) => {
+  const p = new URLSearchParams({ ...(extra || {}), ...(companyId ? { companyId } : {}) }).toString();
+  return p ? '?' + p : '';
+};
+
 export const saasService = {
   getPlans: () => api.get('/saas/plans'),
-  getAddons: () => api.get('/saas/addons'),
-  activateAddon: (type: string) => api.post(`/saas/addons/${type}/activate`),
-  deactivateAddon: (type: string) => api.post(`/saas/addons/${type}/deactivate`),
-  getLimits: () => api.get('/saas/limits'),
-  updateLimits: (data: any) => api.put('/saas/limits', data),
-  getUsage: (month?: string) => api.get('/saas/usage' + (month ? '?month=' + month : '')),
+  getAddons: (companyId?: string) => api.get('/saas/addons' + tq(companyId)),
+  activateAddon: (type: string, companyId?: string) => api.post(`/saas/addons/${type}/activate` + tq(companyId)),
+  deactivateAddon: (type: string, companyId?: string) => api.post(`/saas/addons/${type}/deactivate` + tq(companyId)),
+  getLimits: (companyId?: string) => api.get('/saas/limits' + tq(companyId)),
+  updateLimits: (data: any, companyId?: string) => api.put('/saas/limits' + tq(companyId), data),
+  getUsage: (month?: string, companyId?: string) => api.get('/saas/usage' + tq(companyId, month ? { month } : undefined)),
   trackUsage: (type: string, amount: number) => api.post('/saas/usage/track', { type, amount }),
-  assignLicense: (userId: string, planCode: string) => api.post('/saas/licenses/assign', { userId, planCode }),
-  revokeLicense: (userId: string) => api.post('/saas/licenses/revoke', { userId }),
-  listLicenses: () => api.get('/saas/licenses'),
+  assignLicense: (userId: string, planCode: string, companyId?: string) =>
+    api.post('/saas/licenses/assign' + tq(companyId), { userId, planCode }),
+  revokeLicense: (userId: string, companyId?: string) => api.post('/saas/licenses/revoke' + tq(companyId), { userId }),
+  listLicenses: (companyId?: string) => api.get('/saas/licenses' + tq(companyId)),
   listInvoices: (params?: Record<string, string>) => api.get('/saas/invoices?' + new URLSearchParams(params || {})),
-  generateInvoice: (periodStart: string, periodEnd: string) => api.post('/saas/invoices/generate', { periodStart, periodEnd }),
-  payInvoice: (id: string, paymentMethod: string, reference?: string) => api.put(`/saas/invoices/${id}/pay`, { paymentMethod, reference }),
-  cancelInvoice: (id: string) => api.put(`/saas/invoices/${id}/cancel`),
+  invoicesSummary: (companyId?: string) => api.get('/saas/invoices-summary' + tq(companyId)),
+  generateInvoice: (periodStart: string, periodEnd: string, companyId?: string) =>
+    api.post('/saas/invoices/generate' + tq(companyId), { periodStart, periodEnd }),
+  payInvoice: (id: string, paymentMethod: string, reference?: string, companyId?: string) =>
+    api.put(`/saas/invoices/${id}/pay` + tq(companyId), { paymentMethod, reference }),
+  markOverdue: (id: string, companyId?: string) => api.put(`/saas/invoices/${id}/overdue` + tq(companyId)),
+  cancelInvoice: (id: string, companyId?: string) => api.put(`/saas/invoices/${id}/cancel` + tq(companyId)),
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -441,10 +452,67 @@ export const notificationsService = {
 // ═══════════════════════════════════════════════════════════
 
 export const tenantsService = {
-  list: () => api.get('/tenants'),
+  list: (includeArchived = false) => api.get('/tenants' + (includeArchived ? '?includeArchived=true' : '')),
+  get: (id: string) => api.get(`/tenants/${id}`),
   create: (data: any) => api.post('/tenants', data),
+  update: (id: string, data: any) => api.patch(`/tenants/${id}`, data),
   setActive: (id: string, active: boolean) => api.patch(`/tenants/${id}/active`, { active }),
   setSubscriptionStatus: (id: string, status: string) => api.patch(`/tenants/${id}/subscription-status`, { status }),
+  archive: (id: string) => api.post(`/tenants/${id}/archive`),
+  restore: (id: string) => api.post(`/tenants/${id}/restore`),
+  impersonate: (id: string, userId?: string) => api.post(`/tenants/${id}/impersonate`, userId ? { userId } : {}),
+  auditLogs: (id: string, params?: Record<string, string>) =>
+    api.get(`/tenants/${id}/audit-logs?` + new URLSearchParams(params || {})),
+};
+
+/** Contrat commun aux écrans de gestion des comptes (console tenant, admin tenant, équipe Green-T). */
+export interface UsersApi {
+  list: () => Promise<any>;
+  create: (data: any) => Promise<any>;
+  update: (id: string, data: any) => Promise<any>;
+  setActive: (id: string, active: boolean) => Promise<any>;
+  setPassword: (id: string, data: { password?: string; mustChangePassword?: boolean }) => Promise<any>;
+  resetLink: (id: string) => Promise<any>;
+  linkTechnician?: (id: string, technicianId: string | null) => Promise<any>;
+}
+
+export const tenantUsersApi = (companyId: string): UsersApi => ({
+  list: () => api.get(`/tenants/${companyId}/users`),
+  create: (data) => api.post(`/tenants/${companyId}/users`, data),
+  update: (id, data) => api.patch(`/tenants/${companyId}/users/${id}`, data),
+  setActive: (id, active) => api.patch(`/tenants/${companyId}/users/${id}/active`, { active }),
+  setPassword: (id, data) => api.post(`/tenants/${companyId}/users/${id}/password`, data),
+  resetLink: (id) => api.post(`/tenants/${companyId}/users/${id}/reset-link`),
+});
+
+export const usersService: UsersApi = {
+  list: () => api.get('/users'),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.patch(`/users/${id}`, data),
+  setActive: (id, active) => api.patch(`/users/${id}/active`, { active }),
+  setPassword: (id, data) => api.post(`/users/${id}/password`, data),
+  resetLink: (id) => api.post(`/users/${id}/reset-link`),
+  linkTechnician: (id, technicianId) => api.patch(`/users/${id}/technician`, { technicianId }),
+};
+
+export const consoleTeamService: UsersApi = {
+  list: () => api.get('/console/team'),
+  create: (data) => api.post('/console/team', data),
+  update: (id, data) => api.patch(`/console/team/${id}`, data),
+  setActive: (id, active) => api.patch(`/console/team/${id}/active`, { active }),
+  setPassword: (id, data) => api.post(`/console/team/${id}/password`, data),
+  resetLink: (id) => api.post(`/console/team/${id}/reset-link`),
+};
+
+export const auditService = {
+  list: (params?: Record<string, string>) => api.get('/audit-logs?' + new URLSearchParams(params || {})),
+};
+
+export const accountService = {
+  me: () => api.get('/auth/me'),
+  updateProfile: (data: { fullName?: string; phone?: string }) => api.patch('/auth/me', data),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }),
 };
 
 // ═══════════════════════════════════════════════════════════

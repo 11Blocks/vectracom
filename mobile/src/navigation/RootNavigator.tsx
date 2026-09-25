@@ -26,6 +26,7 @@ import { VehicleCheckScreen } from '../screens/VehicleCheckScreen';
 import { LeaveScreen } from '../screens/LeaveScreen';
 import { MissionConsoScreen } from '../screens/MissionConsoScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { ChangePasswordScreen } from '../screens/ChangePasswordScreen';
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -167,6 +168,9 @@ export function RootNavigator({
         <Stack.Screen name="Leave" component={LeaveScreen} options={{ title: 'Congé' }} />
         <Stack.Screen name="MissionConso" component={MissionConsoScreen} options={{ title: 'Conso' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Réglages' }} />
+        <Stack.Screen name="ChangePassword" options={{ title: 'Mot de passe' }}>
+          {() => <ChangePasswordScreen />}
+        </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -175,11 +179,13 @@ export function RootNavigator({
 export function AuthGate({
   ready,
   userRole,
+  mustChangePassword,
   onLogin,
   onLogout,
 }: {
   ready: boolean;
   userRole: string | null;
+  mustChangePassword?: boolean;
   onLogin: () => void;
   onLogout: () => void;
 }) {
@@ -188,6 +194,13 @@ export function AuthGate({
     return (
       <NavigationContainer theme={navTheme}>
         <LoginScreen onSuccess={onLogin} />
+      </NavigationContainer>
+    );
+  }
+  if (mustChangePassword) {
+    return (
+      <NavigationContainer theme={navTheme}>
+        <ChangePasswordScreen forced onDone={onLogin} onLogout={onLogout} />
       </NavigationContainer>
     );
   }

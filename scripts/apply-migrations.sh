@@ -36,7 +36,8 @@ for f in \
   "$MIG_DIR/001_initial_schema.sql" \
   "$MIG_DIR/002_schema_drift_kpi_partners.sql" \
   "$MIG_DIR/003_schema_drift_stock_compliance.sql" \
-  "$MIG_DIR/004_field_report_sav.sql"
+  "$MIG_DIR/004_field_report_sav.sql" \
+  "$MIG_DIR/005_admin_accounts.sql"
 do
   if [ -f "$f" ]; then
     run_sql "$f"

@@ -16,7 +16,7 @@ class AlertsQueryDto {
 }
 
 @Controller('monitoring')
-@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_ADMIN, UserRole.ADMIN, UserRole.DIRECTION)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_ADMIN, UserRole.SUPPORT_ADMIN, UserRole.ADMIN, UserRole.DIRECTION)
 export class MonitoringController {
   constructor(private readonly monitoringService: MonitoringService) {}
 

@@ -41,6 +41,7 @@ export type AuthUser = {
   role: string;
   companyId?: string | null;
   companyName?: string | null;
+  mustChangePassword?: boolean;
 };
 
 type AuthExpiredListener = () => void;
@@ -103,6 +104,38 @@ export async function logout() {
   await clearSession();
 }
 
+/** Changement de son mot de passe : le serveur révoque les anciens jetons et en renvoie un nouveau. */
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const res = await request<{ accessToken?: string }>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const user = await getUser();
+  if (res?.accessToken && user) await setSession(res.accessToken, { ...user, mustChangePassword: false });
+}
+
+export async function requestPasswordReset(email: string) {
+  const res = await fetch(`${getApiUrl()}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || `Erreur ${res.status}`);
+  return body as { message: string };
+}
+
+type PasswordChangeListener = () => void;
+const passwordChangeListeners = new Set<PasswordChangeListener>();
+
+/** Mot de passe temporaire : l'API refuse tout sauf « mon compte » tant qu'il n'est pas changé. */
+export function onPasswordChangeRequired(listener: PasswordChangeListener) {
+  passwordChangeListeners.add(listener);
+  return () => {
+    passwordChangeListeners.delete(listener);
+  };
+}
+
 export async function pingHealth(): Promise<{ ok: boolean; detail: string }> {
   try {
     const res = await fetch(`${getApiUrl()}/health`, { method: 'GET' });
@@ -136,6 +169,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     await clearSession();
     notifyAuthExpired();
     throw new Error('Session expirée — reconnectez-vous');
+  }
+
+  if (res.status === 403 && body?.code === 'PASSWORD_CHANGE_REQUIRED') {
+    const user = await getUser();
+    const token = await getToken();
+    if (user && token) await setSession(token, { ...user, mustChangePassword: true });
+    passwordChangeListeners.forEach((l) => {
+      try {
+        l();
+      } catch {
+        /* ignore */
+      }
+    });
   }
 
   if (!res.ok) {

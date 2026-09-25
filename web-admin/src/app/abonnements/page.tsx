@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Modal, Card, Skeleton, StatCard, Input, Select, ConfirmDialog, useToast, Tabs } from '@/components/ui';
+import { Button, Badge, Modal, Card, Skeleton, StatCard, Select, ConfirmDialog, useToast, Tabs } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { saasService, techniciansService } from '@/services';
+import { saasService, usersService, tenantUsersApi } from '@/services';
+import { TenantPicker, useSessionUser } from '@/components/admin/TenantPicker';
 import {
   CreditCard, Smartphone, MonitorSmartphone, Bot, MapPin, Mic, Eye, EyeOff,
   Plus, Ban, Loader2, Gauge, Activity, Users, CheckCircle2, Sparkles,
@@ -42,30 +43,47 @@ function Content() {
   const [showAssign, setShowAssign] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<any | null>(null);
 
+  const { user, isConsole } = useSessionUser();
+  const [tenantId, setTenantId] = useState('');
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('companyId');
+    if (fromUrl) setTenantId(fromUrl);
+  }, []);
+  const scope = isConsole ? tenantId : undefined;
+  // useMutation fige sa fonction au premier rendu : le tenant courant passe par une ref.
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const ready = Boolean(user) && (!isConsole || Boolean(tenantId));
+  const canEdit = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'finance_admin';
+
   const month = new Date().toISOString().slice(0, 7);
-  const { data: licenses, loading, refetch } = useQuery(() => saasService.listLicenses(), []);
-  const { data: addons, refetch: refetchAddons } = useQuery(() => saasService.getAddons(), []);
-  const { data: limits, refetch: refetchLimits } = useQuery(() => saasService.getLimits(), []);
-  const { data: usage } = useQuery(() => saasService.getUsage(month), [month]);
-  const { data: techsData } = useQuery(() => techniciansService.list(), []);
-  const techs = Array.isArray(techsData) ? techsData : [];
+  const skip = () => Promise.resolve(null);
+  const { data: licenses, loading, refetch } = useQuery(() => ready ? saasService.listLicenses(scope) : skip(), [ready, scope]);
+  const { data: addons, refetch: refetchAddons } = useQuery(() => ready ? saasService.getAddons(scope) : skip(), [ready, scope]);
+  const { data: limits } = useQuery(() => ready ? saasService.getLimits(scope) : skip(), [ready, scope]);
+  const { data: usage } = useQuery(() => ready ? saasService.getUsage(month, scope) : skip(), [ready, scope, month]);
+  const { data: usersData } = useQuery(
+    () => !ready ? skip() : isConsole ? tenantUsersApi(tenantId).list() : usersService.list(),
+    [ready, scope],
+  );
+  const tenantUsers: any[] = Array.isArray(usersData) ? usersData : [];
 
   const licList = Array.isArray(licenses) ? licenses : [];
   const addonList = Array.isArray(addons) ? addons : [];
   const activeCount = licList.filter(l => l.status === 'active').length;
   const monthlyTotal = licList.filter(l => l.status === 'active').reduce((s, l) => s + Number(l.amount ?? 0), 0);
 
-  const revokeMut = useMutation((userId: string) => saasService.revokeLicense(userId), {
+  const revokeMut = useMutation((userId: string) => saasService.revokeLicense(userId, scopeRef.current), {
     onSuccess: () => { toast({ title: 'Licence révoquée', variant: 'success' }); setRevokeTarget(null); refetch(); },
     onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
   });
   const addonMut = useMutation(({ code, activate }: any) =>
-    activate ? saasService.activateAddon(code) : saasService.deactivateAddon(code), {
+    activate ? saasService.activateAddon(code, scopeRef.current) : saasService.deactivateAddon(code, scopeRef.current), {
     onSuccess: (_d: any) => { toast({ title: 'Option mise à jour', variant: 'success' }); refetchAddons(); },
     onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
   });
 
-  const assignMut = useMutation((d: any) => saasService.assignLicense(d.userId, d.planCode), {
+  const assignMut = useMutation((d: any) => saasService.assignLicense(d.userId, d.planCode, scopeRef.current), {
     onSuccess: () => { toast({ title: 'Licence attribuée', variant: 'success' }); setShowAssign(false); refetch(); },
     onError: (e: any) => toast({ title: 'Attribution impossible', description: e.message, variant: 'error' }),
   });
@@ -77,10 +95,15 @@ function Content() {
           <span className="p-2 rounded-lg bg-[#0f9d70]/10 text-[#0f9d70]"><CreditCard size={20} /></span>
           <div>
             <h1 className="text-xl font-bold text-[#e8ede9]">Abonnements & Licences</h1>
-            <p className="text-xs text-[#7a8f80]">Gestion des licences par utilisateur et des options IA</p>
+            <p className="text-xs text-[#7a8f80]">
+              {isConsole ? 'Console Green-T — licences et options du tenant sélectionné' : 'Gestion des licences par utilisateur et des options IA'}
+            </p>
           </div>
         </div>
-        <Button onClick={() => setShowAssign(true)}><Plus size={16} /> Attribuer une licence</Button>
+        <div className="flex items-center gap-2">
+          {isConsole && <TenantPicker value={tenantId} onChange={setTenantId} />}
+          {canEdit && <Button onClick={() => setShowAssign(true)} disabled={!ready}><Plus size={16} /> Attribuer une licence</Button>}
+        </div>
       </div>
 
       {/* KPI */}
@@ -108,7 +131,7 @@ function Content() {
           <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
             <CreditCard size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
             <p className="text-sm text-[#7a8f80] mb-4">Aucune licence attribuée</p>
-            <Button onClick={() => setShowAssign(true)}><Plus size={15} /> Attribuer une première licence</Button>
+            {canEdit && <Button onClick={() => setShowAssign(true)} disabled={!ready}><Plus size={15} /> Attribuer une première licence</Button>}
           </Card>
         ) : (
           <div className="overflow-x-auto rounded-[0.625rem] border border-[#1e2e25]">
@@ -146,7 +169,7 @@ function Content() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs text-[#7a8f80] hover:text-[#C0392B]"
-                          onClick={() => setRevokeTarget(l)} disabled={l.status !== 'active'}>
+                          onClick={() => setRevokeTarget(l)} disabled={l.status !== 'active' || !canEdit}>
                           <Ban size={13} /> Révoquer
                         </Button>
                       </td>
@@ -179,7 +202,7 @@ function Content() {
                       <p className="text-xs text-[#7a8f80] mt-1">{a.price}</p>
                     </div>
                   </div>
-                  <Button size="sm" variant={isActive ? 'outline' : 'ai'} disabled={addonMut.loading}
+                  <Button size="sm" variant={isActive ? 'outline' : 'ai'} disabled={addonMut.loading || !canEdit}
                     onClick={() => addonMut.mutate({ code: a.code, activate: !isActive })}>
                     {isActive ? <><EyeOff size={13} /> Désactiver</> : <><Eye size={13} /> Activer</>}
                   </Button>
@@ -229,7 +252,7 @@ function Content() {
 
       {/* Modal attribution */}
       <Modal open={showAssign} onClose={() => setShowAssign(false)} title="Attribuer une licence">
-        <AssignForm techs={techs} licensedUserIds={licList.map(l => l.userId)} loading={assignMut.loading}
+        <AssignForm users={tenantUsers} licensedUserIds={licList.filter(l => l.status === 'active').map(l => l.userId)} loading={assignMut.loading}
           onSubmit={d => assignMut.mutate(d)} onCancel={() => setShowAssign(false)} />
       </Modal>
 
@@ -241,35 +264,36 @@ function Content() {
   );
 }
 
-function AssignForm({ techs, licensedUserIds, loading, onSubmit, onCancel }: {
-  techs: any[]; licensedUserIds: string[]; loading: boolean;
+function AssignForm({ users, licensedUserIds, loading, onSubmit, onCancel }: {
+  users: any[]; licensedUserIds: string[]; loading: boolean;
   onSubmit: (d: any) => void; onCancel: () => void;
 }) {
   const [userId, setUserId] = useState('');
   const [planCode, setPlanCode] = useState('MOBILE');
 
-  const candidates = techs.filter(t => t.userId && !licensedUserIds.includes(t.userId));
+  const candidates = users.filter(u => u.active && !licensedUserIds.includes(u.id));
 
   return (
     <form className="space-y-3" onSubmit={e => { e.preventDefault(); onSubmit({ userId, planCode }); }}>
       <div>
-        <p className="text-xs text-[#7a8f80] mb-1.5">Utilisateur (techniciens avec compte, sans licence) *</p>
+        <p className="text-xs text-[#7a8f80] mb-1.5">Utilisateur actif sans licence *</p>
         {candidates.length > 0 ? (
-          <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto">
-            {candidates.map(t => (
-              <button key={t.id} type="button" onClick={() => setUserId(t.userId)}
+          <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
+            {candidates.map(u => (
+              <button key={u.id} type="button" onClick={() => setUserId(u.id)}
                 className={
                   'rounded-lg border px-3 py-2 text-left text-sm transition-all ' +
-                  (userId === t.userId ? 'border-[#0f9d70] bg-[#0f9d70]/10 text-[#0f9d70]' : 'border-[#1e2e25] text-[#e8ede9] hover:border-[#0f9d70]/40')
+                  (userId === u.id ? 'border-[#0f9d70] bg-[#0f9d70]/10 text-[#0f9d70]' : 'border-[#1e2e25] text-[#e8ede9] hover:border-[#0f9d70]/40')
                 }>
-                {t.fullName}
-                <span className="text-xs text-[#7a8f80] ml-2">— compte lié</span>
+                {u.fullName}
+                <span className="text-xs text-[#7a8f80] ml-2">— {u.email}</span>
               </button>
             ))}
           </div>
         ) : (
-          <Input label="ID utilisateur (UUID)" value={userId} onChange={e => setUserId(e.target.value)}
-            placeholder="Aucun technicien éligible — collez un UUID" />
+          <p className="text-sm text-[#7a8f80] rounded-lg border border-[#1e2e25] p-3">
+            Tous les utilisateurs actifs ont déjà une licence. Créez un compte dans Paramètres → Utilisateurs.
+          </p>
         )}
       </div>
       <Select label="Plan *" value={planCode} onChange={e => setPlanCode(e.target.value)}>

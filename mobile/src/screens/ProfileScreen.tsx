@@ -54,6 +54,9 @@ export function ProfileScreen({ onLogout }: { onLogout: () => void }) {
       <Button variant="outline" onPress={() => nav.navigate('Incident', {})}>
         Incident GPS
       </Button>
+      <Button variant="outline" onPress={() => nav.navigate('ChangePassword')}>
+        Changer mon mot de passe
+      </Button>
       <Button variant="outline" onPress={() => nav.navigate('Settings')}>
         Réglages
       </Button>

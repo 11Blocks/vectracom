@@ -10,7 +10,13 @@ import { GenerateInvoiceSaasDto } from './dto/generate-invoice-saas.dto';
 import { PayInvoiceSaasDto } from './dto/pay-invoice-saas.dto';
 import { INVOICE_SAAS_STATUSES } from './invoices-saas/entities/invoice-saas.entity';
 
-class UsageQueryDto {
+class TenantScopedQuery {
+  @IsOptional()
+  @IsUUID()
+  companyId?: string;
+}
+
+class UsageQueryDto extends TenantScopedQuery {
   @IsOptional() @IsString() month?: string;
 }
 
@@ -23,19 +29,16 @@ class TrackUsageDto {
   amount!: number;
 }
 
-class InvoicesQueryDto {
+class InvoicesQueryDto extends TenantScopedQuery {
   @IsOptional() @IsString() @IsIn(INVOICE_SAAS_STATUSES as unknown as string[]) status?: string;
-  @IsOptional() @IsUUID() companyId?: string;
 }
 
-class TenantScopedQuery {
-  @IsOptional()
-  @IsUUID()
-  companyId?: string;
-}
-
+/**
+ * Tenant (admin/direction) : sa propre souscription.
+ * Console Green-T : n'importe quel tenant via ?companyId= ; finance_admin gère, support_admin consulte.
+ */
 @Controller('saas')
-@Roles(UserRole.ADMIN, UserRole.DIRECTION)
+@Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.FINANCE_ADMIN, UserRole.SUPPORT_ADMIN)
 export class SaasController {
   constructor(
     private readonly saasService: SaasService,
@@ -51,97 +54,147 @@ export class SaasController {
   }
 
   @Get('addons')
-  addons(@CurrentUser('companyId') companyId: string | null) {
-    this.requireTenant(companyId);
-    return this.saasService.getAddons(companyId!);
+  addons(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+  ) {
+    return this.saasService.getAddons(this.resolveTenant(companyId, role, query.companyId));
   }
 
   @Post('addons/:addonType/activate')
-  @Roles(UserRole.ADMIN)
-  activateAddon(@CurrentUser('companyId') companyId: string | null, @Param('addonType') addonType: string) {
-    this.requireTenant(companyId);
-    return this.saasService.activateAddon(companyId!, addonType);
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
+  activateAddon(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+    @Param('addonType') addonType: string,
+  ) {
+    return this.saasService.activateAddon(this.resolveTenant(companyId, role, query.companyId), addonType);
   }
 
   @Post('addons/:addonType/deactivate')
-  @Roles(UserRole.ADMIN)
-  deactivateAddon(@CurrentUser('companyId') companyId: string | null, @Param('addonType') addonType: string) {
-    this.requireTenant(companyId);
-    return this.saasService.deactivateAddon(companyId!, addonType);
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
+  deactivateAddon(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+    @Param('addonType') addonType: string,
+  ) {
+    return this.saasService.deactivateAddon(this.resolveTenant(companyId, role, query.companyId), addonType);
   }
 
   // ------------------- Limites & usage -------------------
 
   @Get('limits')
-  limits(@CurrentUser('companyId') companyId: string | null) {
-    this.requireTenant(companyId);
-    return this.saasService.getLimits(companyId!);
+  limits(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+  ) {
+    return this.saasService.getLimits(this.resolveTenant(companyId, role, query.companyId));
   }
 
   @Put('limits')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
   updateLimits(
     @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
     @Body() dto: SaasLimitDto,
   ) {
-    this.requireTenant(companyId);
-    return this.saasService.updateLimits(companyId!, dto);
+    return this.saasService.updateLimits(this.resolveTenant(companyId, role, query.companyId), dto);
   }
 
   @Get('usage')
-  usage(@CurrentUser('companyId') companyId: string | null, @Query() query: UsageQueryDto) {
-    this.requireTenant(companyId);
-    return this.saasService.getUsage(companyId!, query.month ?? new Date().toISOString());
+  usage(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: UsageQueryDto,
+  ) {
+    return this.saasService.getUsage(
+      this.resolveTenant(companyId, role, query.companyId),
+      query.month ?? new Date().toISOString(),
+    );
   }
 
   @Post('usage/track')
   @Roles(UserRole.ADMIN)
   trackUsage(@CurrentUser('companyId') companyId: string | null, @Body() dto: TrackUsageDto) {
-    this.requireTenant(companyId);
-    return this.saasService.trackUsage(companyId!, dto.type as never, dto.amount);
+    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
+    return this.saasService.trackUsage(companyId, dto.type as never, dto.amount);
   }
 
   @Get('overage')
   overage(
     @CurrentUser('companyId') companyId: string | null,
-    @Query('month') month?: string,
+    @CurrentUser('role') role: string,
+    @Query() query: UsageQueryDto,
   ) {
-    this.requireTenant(companyId);
-    return this.saasService.calculateOverage(companyId!, month ?? new Date().toISOString());
+    return this.saasService.calculateOverage(
+      this.resolveTenant(companyId, role, query.companyId),
+      query.month ?? new Date().toISOString(),
+    );
   }
 
   // ------------------- Licences -------------------
 
   @Get('licenses')
-  licenses(@CurrentUser('companyId') companyId: string | null) {
-    this.requireTenant(companyId);
-    return this.subscriptions.getCompanyLicenses(companyId!);
+  licenses(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+  ) {
+    return this.subscriptions.getCompanyLicenses(this.resolveTenant(companyId, role, query.companyId));
   }
 
   @Post('licenses/assign')
-  @Roles(UserRole.ADMIN)
-  assignLicense(@CurrentUser('companyId') companyId: string | null, @Body() dto: AssignLicenseDto) {
-    this.requireTenant(companyId);
-    return this.subscriptions.assignLicense(companyId!, dto);
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
+  assignLicense(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+    @Body() dto: AssignLicenseDto,
+  ) {
+    return this.subscriptions.assignLicense(this.resolveTenant(companyId, role, query.companyId), dto);
   }
 
   @Post('licenses/revoke')
-  @Roles(UserRole.ADMIN)
-  revokeLicense(@CurrentUser('companyId') companyId: string | null, @Body() dto: RevokeLicenseDto) {
-    this.requireTenant(companyId);
-    return this.subscriptions.revokeLicense(companyId!, dto.userId);
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
+  revokeLicense(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+    @Body() dto: RevokeLicenseDto,
+  ) {
+    return this.subscriptions.revokeLicense(this.resolveTenant(companyId, role, query.companyId), dto.userId);
   }
 
   // ------------------- Factures SaaS -------------------
 
+  /** Console Green-T sans ?companyId= : factures de tous les tenants. */
   @Get('invoices')
-  invoices(@CurrentUser('companyId') companyId: string | null, @Query() query: InvoicesQueryDto) {
-    this.requireTenant(companyId);
-    return this.invoicesSaas.list(companyId!, { status: query.status });
+  invoices(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: InvoicesQueryDto,
+  ) {
+    const tenant = companyId ?? (this.isConsole(role) ? query.companyId ?? null : this.resolveTenant(companyId, role));
+    return this.invoicesSaas.list(tenant, { status: query.status });
+  }
+
+  @Get('invoices-summary')
+  invoicesSummary(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+  ) {
+    const tenant = companyId ?? (this.isConsole(role) ? query.companyId ?? null : this.resolveTenant(companyId, role));
+    return this.invoicesSaas.summary(tenant);
   }
 
   @Post('invoices/generate')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
   generateInvoice(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('role') role: string,
@@ -164,7 +217,7 @@ export class SaasController {
   }
 
   @Put('invoices/:id/pay')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
   pay(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('role') role: string,
@@ -177,7 +230,7 @@ export class SaasController {
   }
 
   @Put('invoices/:id/overdue')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
   overdue(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('role') role: string,
@@ -189,24 +242,31 @@ export class SaasController {
   }
 
   @Put('invoices/:id/cancel')
-  @Roles(UserRole.ADMIN)
-  cancel(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
-    this.requireTenant(companyId);
-    return this.invoicesSaas.cancel(companyId!, id);
+  @Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN)
+  cancel(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @Query() query: TenantScopedQuery,
+    @Param('id') id: string,
+  ) {
+    return this.invoicesSaas.cancel(this.resolveTenant(companyId, role, query.companyId), id);
   }
 
-  private requireTenant(companyId: string | null): void {
-    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
+  private isConsole(role: string): boolean {
+    return GREEN_T_ROLES.includes(role);
   }
 
   /**
-   * Console Green-T : super_admin/finance_admin agissent sur n'importe quel
-   * tenant via ?companyId= — indispensable pour encaisser un impayé d'un
-   * tenant suspendu (le paiement ne peut plus venir du tenant lui-même).
+   * Tenant : toujours son propre companyId (le TenantGuard refuse un autre ?companyId=).
+   * Console Green-T : tenant désigné par ?companyId= — indispensable pour encaisser
+   * l'impayé d'un tenant suspendu (le paiement ne peut plus venir du tenant lui-même).
    */
   private resolveTenant(companyId: string | null, role: string, requested?: string): string {
     if (companyId) return companyId;
-    if (requested && GREEN_T_ROLES.includes(role as never)) return requested;
+    if (this.isConsole(role)) {
+      if (requested) return requested;
+      throw new BadRequestException('Console Green-T : précisez le tenant (?companyId=)');
+    }
     throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
   }
 }

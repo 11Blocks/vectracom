@@ -34,9 +34,13 @@ export default function LoginPage() {
         throw new Error(body.message || `Erreur ${res.status}`);
       }
       const data = await res.json();
+      localStorage.removeItem('vectracom_support_token');
+      localStorage.removeItem('vectracom_support_user');
       localStorage.setItem('vectracom_token', data.accessToken);
       localStorage.setItem('vectracom_user', JSON.stringify(data.user));
-      router.push('/dashboard');
+      if (data.user?.mustChangePassword) router.push('/compte?force=1');
+      else if (['super_admin', 'finance_admin', 'support_admin'].includes(data.user?.role)) router.push('/console');
+      else router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
     } finally {

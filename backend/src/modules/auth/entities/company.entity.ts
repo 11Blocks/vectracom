@@ -48,6 +48,37 @@ export class Company extends BaseEntity {
   @Column({ default: false })
   platformFeePaid!: boolean;
 
+  @Column({ type: 'text', nullable: true })
+  contactName: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  contactEmail: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  contactPhone: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  address: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  city: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  ninea: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  rccm: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
+
+  /** Plafond de comptes utilisateurs actifs (null = illimité). */
+  @Column({ type: 'integer', nullable: true })
+  maxUsers: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  archivedAt: Date | null;
+
   @OneToMany(() => User, (user) => user.company)
   users!: User[];
 }

@@ -11,6 +11,8 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   app.setGlobalPrefix('api/v1');
+  // Derrière nginx (VPS) : IP réelle du client pour le journal d'audit.
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
   // Fichiers uploadés (pré-audit IA Vision…) servis statiquement.
   const uploadsDir = join(process.cwd(), 'uploads');

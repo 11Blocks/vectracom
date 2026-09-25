@@ -7,10 +7,10 @@ import {
   ShieldCheck, Users, Calculator, Receipt, FileText, Target,
   AlertTriangle, Eye, Building2, CreditCard, Activity, TrendingUp,
   Bell, MapPin, Bot, Warehouse, Settings, UserPlus, UserCog, LayoutGrid,
-  Upload, ListChecks, Clock, MessageSquare,
+  Upload, ListChecks, Clock, MessageSquare, KeyRound, History, UsersRound,
 } from 'lucide-react';
 
-export interface NavItem { href: string; label: string; icon: React.ReactNode; }
+export interface NavItem { href: string; label: string; icon: React.ReactNode; roles?: string[]; }
 
 const icon = (Icon: any) => <Icon size={16} strokeWidth={2} className="shrink-0" />;
 
@@ -20,6 +20,8 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/console', label: 'Tenants', icon: icon(Building2) },
       { href: '/abonnements', label: 'Abonnements', icon: icon(CreditCard) },
       { href: '/abonnements/facturation', label: 'Facturation SaaS', icon: icon(Receipt) },
+      { href: '/audit', label: "Journal d'audit", icon: icon(History) },
+      { href: '/equipe-green-t', label: 'Équipe Green-T', icon: icon(UsersRound), roles: ['super_admin'] },
     ]},
     { group: 'Monitoring', items: [
       { href: '/monitoring', label: 'Plateforme', icon: icon(Activity) },
@@ -58,6 +60,7 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/comptabilite', label: 'Comptabilité', icon: icon(Calculator) },
       { href: '/invoices', label: 'Facturation', icon: icon(Receipt) },
       { href: '/parametres', label: 'Paramètres', icon: icon(Settings) },
+      { href: '/parametres/utilisateurs', label: 'Utilisateurs', icon: icon(KeyRound), roles: ['admin'] },
       { href: '/parametres/formulaires', label: 'Formulaires', icon: icon(ListChecks) },
     ]},
     { group: 'Analyse', items: [
@@ -112,12 +115,18 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
   ],
 };
 
-export function getNavForRole(role: string) {
+function navGroupsForRole(role: string) {
   if (['super_admin','finance_admin','support_admin'].includes(role)) return NAV.greenT;
   if (role === 'direction') return NAV.direction;
   if (role === 'chef_equipe') return NAV.chef_equipe;
   if (role === 'magasinier') return NAV.magasinier;
   return NAV.admin;
+}
+
+export function getNavForRole(role: string) {
+  return navGroupsForRole(role)
+    .map(g => ({ ...g, items: g.items.filter(i => !i.roles || i.roles.includes(role)) }))
+    .filter(g => g.items.length > 0);
 }
 
 export function Sidebar({ role }: { role: string }) {

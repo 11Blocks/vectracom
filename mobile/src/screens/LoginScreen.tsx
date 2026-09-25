@@ -3,7 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Button, Card, Input } from '../components/ui';
 import { colors, radius, spacing } from '../theme/colors';
-import { login } from '../services/api';
+import { login, requestPasswordReset } from '../services/api';
 
 function ShieldMark() {
   return (
@@ -20,8 +20,8 @@ function ShieldMark() {
 }
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
-  const [email, setEmail] = useState('admin@onecomit.sn');
-  const [password, setPassword] = useState('ChangeMe!2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,9 +76,22 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
         </Button>
         <Text
           style={styles.forgot}
-          onPress={() =>
-            Alert.alert('Mot de passe oublié', 'Utilisez le portail web /forgot-password.')
-          }
+          onPress={async () => {
+            const target = email.trim();
+            if (!target) {
+              Alert.alert('Mot de passe oublié', 'Saisissez d’abord votre adresse e-mail.');
+              return;
+            }
+            try {
+              const res = await requestPasswordReset(target);
+              Alert.alert(
+                'Mot de passe oublié',
+                `${res.message}\nSi vous ne recevez rien, demandez à votre administrateur de réinitialiser votre mot de passe.`,
+              );
+            } catch (e: any) {
+              Alert.alert('Mot de passe oublié', e?.message ?? 'Demande impossible');
+            }
+          }}
         >
           Mot de passe oublié ?
         </Text>

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Modal, Card, Skeleton, EmptyState, Input, ConfirmDialog, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { saasService } from '@/services';
+import { TenantPicker, useSessionUser } from '@/components/admin/TenantPicker';
 import { Receipt, Plus, Search, Loader2, Ban, CheckCircle, Package } from 'lucide-react';
 
 function fmtFCFA(n: any) {
@@ -44,14 +45,34 @@ function Content() {
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState(monthBounds);
   const [payForm, setPayForm] = useState({ paymentMethod: 'virement', reference: '' });
+  const { user, isConsole } = useSessionUser();
+  const [tenantId, setTenantId] = useState('');
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('companyId');
+    if (fromUrl) setTenantId(fromUrl);
+  }, []);
+  const canEdit = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'finance_admin';
+  const invoiceScope = (item: any) => (isConsole ? item.companyId : undefined);
 
-  const { data: items, loading, refetch } = useQuery(
-    () => saasService.listInvoices(filter ? { status: filter } : undefined),
-    [filter],
+  const { data: items, loading, refetch: refetchList } = useQuery(
+    () => {
+      if (!user) return Promise.resolve(null);
+      const params: Record<string, string> = {};
+      if (filter) params.status = filter;
+      if (isConsole && tenantId) params.companyId = tenantId;
+      return saasService.listInvoices(params);
+    },
+    [user?.id, filter, tenantId],
   );
+  const { data: summary, refetch: refetchSummary } = useQuery(
+    () => user ? saasService.invoicesSummary(isConsole && tenantId ? tenantId : undefined) : Promise.resolve(null),
+    [user?.id, tenantId],
+  );
+  const refetch = () => { refetchList(); refetchSummary(); };
 
   const generateMut = useMutation(
-    () => saasService.generateInvoice(period.periodStart, period.periodEnd),
+    (p: { periodStart: string; periodEnd: string; companyId?: string }) =>
+      saasService.generateInvoice(p.periodStart, p.periodEnd, p.companyId),
     {
       onSuccess: () => { toast({ title: 'Facture générée', variant: 'success' }); setShowGenerate(false); refetch(); },
       onError: (err: any) => toast({ title: 'Erreur', description: err.message, variant: 'error' }),
@@ -59,7 +80,8 @@ function Content() {
   );
 
   const payMut = useMutation(
-    () => saasService.payInvoice(payTarget.id, payForm.paymentMethod, payForm.reference || undefined),
+    (p: { id: string; paymentMethod: string; reference?: string; companyId?: string }) =>
+      saasService.payInvoice(p.id, p.paymentMethod, p.reference, p.companyId),
     {
       onSuccess: () => { toast({ title: 'Paiement enregistré', variant: 'success' }); setPayTarget(null); refetch(); },
       onError: (err: any) => toast({ title: 'Erreur', description: err.message, variant: 'error' }),
@@ -67,14 +89,19 @@ function Content() {
   );
 
   const cancelMut = useMutation(
-    (id: string) => saasService.cancelInvoice(id),
+    (p: { id: string; companyId?: string }) => saasService.cancelInvoice(p.id, p.companyId),
     {
       onSuccess: () => { toast({ title: 'Facture annulée', variant: 'success' }); setCancelId(null); refetch(); },
       onError: (err: any) => toast({ title: 'Erreur', description: err.message, variant: 'error' }),
     },
   );
 
-  const list = (Array.isArray(items) ? items : []).filter((item: any) => {
+  const allItems: any[] = Array.isArray(items) ? items : [];
+  const cancelTarget = allItems.find(i => i.id === cancelId);
+  const sum = (summary ?? {}) as Record<string, { count: number; amount: number }>;
+  const stat = (k: string) => sum[k] ?? { count: 0, amount: 0 };
+
+  const list = allItems.filter((item: any) => {
     if (!search) return true;
     return JSON.stringify(item).toLowerCase().includes(search.toLowerCase());
   });
@@ -86,12 +113,36 @@ function Content() {
           <span className="p-2 rounded-lg bg-[#0f9d70]/10 text-[#0f9d70]"><Receipt size={20} /></span>
           <div>
             <h1 className="text-xl font-bold text-[#e8ede9]">Facturation SaaS</h1>
-            <p className="text-xs text-[#7a8f80]">Licences & options — {list.length} facture(s)</p>
+            <p className="text-xs text-[#7a8f80]">
+              {isConsole ? 'Console Green-T — factures de tous les clients' : 'Licences & options'} — {list.length} facture(s)
+            </p>
           </div>
         </div>
-        <Button onClick={() => { setPeriod(monthBounds()); setShowGenerate(true); }}>
-          <Plus size={16} /> Générer une facture
-        </Button>
+        <div className="flex items-center gap-2">
+          {isConsole && <TenantPicker value={tenantId} onChange={setTenantId} allowAll />}
+          {canEdit && (
+            <Button
+              disabled={isConsole && !tenantId}
+              title={isConsole && !tenantId ? 'Sélectionnez un client pour générer sa facture' : undefined}
+              onClick={() => { setPeriod(monthBounds()); setShowGenerate(true); }}>
+              <Plus size={16} /> Générer une facture
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { k: 'pending', label: 'En attente' },
+          { k: 'overdue', label: 'En retard' },
+          { k: 'paid', label: 'Payées' },
+          { k: 'cancelled', label: 'Annulées' },
+        ].map(({ k, label }) => (
+          <Card key={k} className="border-[#1e2e25] bg-[#111916] p-3">
+            <p className="text-xs text-[#7a8f80]">{label} · {stat(k).count}</p>
+            <p className="text-lg font-bold text-[#e8ede9]">{fmtFCFA(stat(k).amount)}</p>
+          </Card>
+        ))}
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
@@ -126,6 +177,7 @@ function Content() {
             <thead>
               <tr className="border-b border-[#1e2e25] bg-[#111916]">
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Numéro</th>
+                {isConsole && <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Client</th>}
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Début</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Fin</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Total TTC</th>
@@ -135,10 +187,15 @@ function Content() {
             </thead>
             <tbody className="divide-y divide-[#1e2e25]/50 bg-[#111916]">
               {list.map((item: any) => {
-                const canAct = item.status === 'pending' || item.status === 'overdue';
+                const canAct = canEdit && (item.status === 'pending' || item.status === 'overdue');
                 return (
                   <tr key={item.id} className="hover:bg-[#172019] transition-colors">
                     <td className="px-4 py-3 font-mono text-xs text-[#e8ede9]">{item.invoiceNumber ?? '—'}</td>
+                    {isConsole && (
+                      <td className="px-4 py-3 text-[#e8ede9]">
+                        <a className="hover:text-[#0f9d70]" href={`/console/tenant?id=${item.companyId}&tab=subscription`}>{item.companyName ?? '—'}</a>
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-[#7a8f80]">{fmtDate(item.periodStart)}</td>
                     <td className="px-4 py-3 text-[#7a8f80]">{fmtDate(item.periodEnd)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-[#e8ede9]">{fmtFCFA(item.totalTtc)}</td>
@@ -180,7 +237,7 @@ function Content() {
           </div>
           <div className="flex gap-2 justify-end pt-1">
             <Button variant="secondary" onClick={() => setShowGenerate(false)}>Annuler</Button>
-            <Button disabled={generateMut.loading || !period.periodStart || !period.periodEnd} onClick={() => generateMut.mutate()}>
+            <Button disabled={generateMut.loading || !period.periodStart || !period.periodEnd} onClick={() => generateMut.mutate({ ...period, companyId: isConsole ? tenantId : undefined })}>
               {generateMut.loading && <Loader2 size={14} className="animate-spin" />} Générer
             </Button>
           </div>
@@ -203,7 +260,12 @@ function Content() {
           <Input label="Référence (optionnel)" value={payForm.reference} onChange={e => setPayForm({ ...payForm, reference: e.target.value })} placeholder="N° virement / reçu…" />
           <div className="flex gap-2 justify-end pt-1">
             <Button variant="secondary" onClick={() => setPayTarget(null)}>Fermer</Button>
-            <Button disabled={payMut.loading} onClick={() => payMut.mutate()}>
+            <Button disabled={payMut.loading} onClick={() => payTarget && payMut.mutate({
+              id: payTarget.id,
+              paymentMethod: payForm.paymentMethod,
+              reference: payForm.reference || undefined,
+              companyId: invoiceScope(payTarget),
+            })}>
               {payMut.loading && <Loader2 size={14} className="animate-spin" />} Confirmer le paiement
             </Button>
           </div>
@@ -213,7 +275,7 @@ function Content() {
       <ConfirmDialog open={!!cancelId} onClose={() => setCancelId(null)} title="Annuler la facture"
         message="La facture passera au statut « cancelled ». Cette action ne la supprime pas."
         confirmText="Annuler la facture" danger
-        onConfirm={() => cancelId && cancelMut.mutate(cancelId)} />
+        onConfirm={() => cancelId && cancelMut.mutate({ id: cancelId, companyId: cancelTarget ? invoiceScope(cancelTarget) : undefined })} />
     </div>
   );
 }

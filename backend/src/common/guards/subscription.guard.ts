@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { IS_ACCOUNT_ROUTE_KEY } from '../decorators/account-route.decorator';
 import { GREEN_T_ROLES } from '../decorators/roles.decorator';
 import { JwtPayloadUser } from '../decorators/current-user.decorator';
 import { Company } from '../../modules/auth/entities/company.entity';
@@ -27,6 +28,11 @@ export class SubscriptionGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+    const isAccountRoute = this.reflector.getAllAndOverride<boolean>(IS_ACCOUNT_ROUTE_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isAccountRoute) return true;
 
     const request = context.switchToHttp().getRequest();
     const user: JwtPayloadUser | undefined = request.user;

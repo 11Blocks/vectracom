@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { UserRole } from '../../../common/decorators/roles.decorator';
 
 /**
@@ -28,4 +28,8 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   adminRole?: Extract<UserRole, 'admin'>;
+
+  @IsOptional()
+  @IsBoolean()
+  mustChangePassword?: boolean;
 }

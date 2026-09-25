@@ -40,6 +40,16 @@ export class User extends BaseEntity {
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt: Date | null;
 
+  @Column({ type: 'text', nullable: true })
+  phone: string | null;
+
+  @Column({ default: false })
+  mustChangePassword!: boolean;
+
+  /** Les JWT émis avant cette date sont refusés (changement / reset de mot de passe). */
+  @Column({ type: 'timestamptz', nullable: true })
+  passwordChangedAt: Date | null;
+
   @Column({ type: 'text', nullable: true, select: false })
   passwordResetToken: string | null;
 

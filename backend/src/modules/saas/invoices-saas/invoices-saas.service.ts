@@ -117,13 +117,17 @@ export class InvoicesSaasService {
     return { invoice, transactions, overage };
   }
 
-  list(companyId: string, filters: { status?: string }) {
-    const qb = this.invoiceRepository
-      .createQueryBuilder('i')
-      .where('i.company_id = :companyId', { companyId })
-      .orderBy('i.periodStart', 'DESC');
+  /** companyId null = tous les tenants (console Green-T), avec le nom du tenant. */
+  async list(companyId: string | null, filters: { status?: string }) {
+    const qb = this.invoiceRepository.createQueryBuilder('i').orderBy('i.periodStart', 'DESC');
+    if (companyId) qb.where('i.company_id = :companyId', { companyId });
     if (filters.status) qb.andWhere('i.status = :status', { status: filters.status });
-    return qb.getMany();
+    const invoices = await qb.getMany();
+    const ids = [...new Set(invoices.map((i) => i.companyId).filter(Boolean))] as string[];
+    if (!ids.length) return invoices;
+    const companies = await this.companyRepository.find({ where: ids.map((id) => ({ id })), select: ['id', 'name'] });
+    const names = new Map(companies.map((c) => [c.id, c.name]));
+    return invoices.map((i) => ({ ...i, companyName: names.get(i.companyId ?? '') ?? null }));
   }
 
   /** Paiement : la facture passe à paid et le tenant est réactivé s'il était retard/suspendu. */
@@ -165,6 +169,19 @@ export class InvoicesSaasService {
     await this.invoiceRepository.save(invoice);
     await this.companyRepository.update({ id: companyId }, { subscriptionStatus: companyStatus });
     return { invoice: await this.invoiceRepository.findOne({ where: { id } }), daysLate, companyStatus };
+  }
+
+  /** Totaux par statut (console Green-T : encours, impayés, encaissé). */
+  async summary(companyId: string | null) {
+    const qb = this.invoiceRepository
+      .createQueryBuilder('i')
+      .select('i.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect('COALESCE(SUM(i.total_ttc),0)', 'amount')
+      .groupBy('i.status');
+    if (companyId) qb.where('i.company_id = :companyId', { companyId });
+    const rows: { status: string; count: string; amount: string }[] = await qb.getRawMany();
+    return Object.fromEntries(rows.map((r) => [r.status, { count: Number(r.count), amount: Number(r.amount) }]));
   }
 
   async cancel(companyId: string, id: string) {

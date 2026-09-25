@@ -226,6 +226,11 @@ function Content() {
               <ClipboardList size={14} /> Formulaires
             </Button>
           </Link>
+          <Link href="/parametres/utilisateurs">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs border-[#1e2e25]">
+              <Users size={14} /> Comptes utilisateurs
+            </Button>
+          </Link>
           <Link href="/parametres/permissions">
             <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs border-[#1e2e25]">
               <Shield size={14} /> Permissions

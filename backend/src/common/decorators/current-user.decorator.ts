@@ -9,6 +9,9 @@ export interface JwtPayloadUser {
   companyId: string | null;
   companyName?: string;
   licenseType?: string | null;
+  mustChangePassword?: boolean;
+  /** Super admin à l'origine d'une session support, sinon null. */
+  impersonatedBy?: string | null;
 }
 
 export const CurrentUser = createParamDecorator(

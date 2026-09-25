@@ -63,7 +63,7 @@ export class AuditInterceptor implements NestInterceptor {
           `${method} ${route} → ${statusCode}`,
           request.params?.id ?? null,
           request.params?.id ?? null,
-          JSON.stringify({ body, error }),
+          JSON.stringify(user?.impersonatedBy ? { body, error, impersonatedBy: user.impersonatedBy } : { body, error }),
           request.ip ?? null,
         ],
       );

@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Modal, Card, Skeleton, StatCard, Input, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { tenantsService, businessService } from '@/services';
 import {
   Building2, Plus, Loader2, Search, CheckCircle2, XCircle, Power,
-  ShieldCheck, ShieldAlert, ShieldX, TrendingUp, CreditCard, ArrowRight,
+  ShieldCheck, ShieldAlert, ShieldX, TrendingUp, CreditCard, ArrowRight, Settings2,
 } from 'lucide-react';
 
 const SUB_META: Record<string, { label: string; cls: string; icon: any }> = {
@@ -36,10 +37,12 @@ export default function Page() {
 
 function Content() {
   const { toast } = useToast();
+  const router = useRouter();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
 
-  const { data, loading, refetch } = useQuery(() => tenantsService.list(), []);
+  const { data, loading, refetch } = useQuery(() => tenantsService.list(showArchived), [showArchived]);
   const { data: biz } = useQuery(() => businessService.dashboard(), []);
   const tenants = Array.isArray(data) ? data : [];
   const list = tenants.filter(t =>
@@ -47,7 +50,12 @@ function Content() {
   );
 
   const createMut = useMutation((d: any) => tenantsService.create(d), {
-    onSuccess: () => { toast({ title: 'Tenant créé', description: 'Compte admin initialisé', variant: 'success' }); setShowCreate(false); refetch(); },
+    onSuccess: (res: any) => {
+      toast({ title: 'Tenant créé', description: 'Compte admin initialisé', variant: 'success' });
+      setShowCreate(false);
+      if (res?.company?.id) router.push(`/console/tenant?id=${res.company.id}&tab=users`);
+      else refetch();
+    },
     onError: (e: any) => toast({ title: 'Création impossible', description: e.message, variant: 'error' }),
   });
   const activeMut = useMutation(({ id, active }: any) => tenantsService.setActive(id, active), {
@@ -89,6 +97,10 @@ function Content() {
           <input type="text" placeholder="Rechercher un tenant…" value={search} onChange={e => setSearch(e.target.value)}
             className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] placeholder:text-[#7a8f80] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50" />
         </div>
+        <label className="flex items-center gap-2 text-xs text-[#7a8f80] cursor-pointer">
+          <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} className="accent-[#0f9d70]" />
+          Afficher les tenants archivés
+        </label>
         <Link href="/monitoring/business" className="text-sm text-[#0f9d70] hover:underline flex items-center gap-1">
           Métriques business <ArrowRight size={14} />
         </Link>
@@ -110,9 +122,11 @@ function Content() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Entreprise</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Statut abonnement</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Changer le statut</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Utilisateurs</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Onboarding</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Créé le</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Actif</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2e25]/50 bg-[#111916]">
@@ -126,7 +140,8 @@ function Content() {
                           {(t.name ?? '?').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-[#e8ede9]">{t.name}</p>
+                          <Link href={`/console/tenant?id=${t.id}`} className="font-medium text-[#e8ede9] hover:text-[#0f9d70] hover:underline">{t.name}</Link>
+                          {t.archivedAt && <Badge className="ml-2 bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]">Archivé</Badge>}
                           {t.sonatelSubcontractorName && <p className="text-xs text-[#7a8f80]">ST : {t.sonatelSubcontractorName}</p>}
                         </div>
                       </div>
@@ -141,6 +156,9 @@ function Content() {
                       >
                         {SUB_STATUSES.map(s => <option key={s} value={s}>{SUB_META[s].label}</option>)}
                       </select>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#7a8f80]">
+                      <span className="text-[#e8ede9] font-medium">{t.activeUserCount ?? 0}</span> actifs / {t.userCount ?? 0}
                     </td>
                     <td className="px-4 py-3">
                       {t.onboardingPaid
@@ -161,6 +179,11 @@ function Content() {
                       >
                         <Power size={12} /> {t.active ? 'Actif' : 'Inactif'}
                       </button>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/console/tenant?id=${t.id}`} className="inline-flex items-center gap-1 rounded-md border border-[#1e2e25] px-2.5 py-1 text-xs text-[#e8ede9] hover:border-[#0f9d70]/40 hover:text-[#0f9d70]">
+                        <Settings2 size={12} /> Gérer
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -203,18 +226,19 @@ function CreateTenantModal({ open, onClose, loading, onSubmit }: {
 }) {
   const [f, setF] = useState({
     companyName: '', sonatelSubcontractorName: '', adminFullName: '',
-    adminEmail: '', adminPassword: '', onboardingPaid: false,
+    adminEmail: '', adminPassword: '', contactPhone: '', onboardingPaid: false, mustChangePassword: true,
   });
   const genPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
     let pwd = '';
-    for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < 10; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+    pwd += 'abcdefghjkmnpqrstuvwxyz'[Math.floor(Math.random() * 23)] + String(2 + Math.floor(Math.random() * 8));
     setF(p => ({ ...p, adminPassword: pwd }));
   };
 
   return (
     <Modal open={open} onClose={onClose} title="Créer un nouveau tenant" size="lg">
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); onSubmit(f); }}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); onSubmit({ ...f, contactPhone: f.contactPhone || undefined }); }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Nom de l'entreprise *" value={f.companyName} onChange={e => setF({ ...f, companyName: e.target.value })} required placeholder="3STB" />
           <Input label="Nom sous-traitant SONATEL" value={f.sonatelSubcontractorName} onChange={e => setF({ ...f, sonatelSubcontractorName: e.target.value })} placeholder="3STB (colonne ST)" />
@@ -228,6 +252,12 @@ function CreateTenantModal({ open, onClose, loading, onSubmit }: {
           <Input label="Mot de passe (min. 8) *" type="text" value={f.adminPassword} onChange={e => setF({ ...f, adminPassword: e.target.value })} required minLength={8} placeholder="••••••••" />
           <Button type="button" variant="secondary" onClick={genPassword}>Générer</Button>
         </div>
+        <Input label="Téléphone du contact" value={f.contactPhone} onChange={e => setF({ ...f, contactPhone: e.target.value })} placeholder="+221 77 000 00 00" />
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-[#e8ede9]">
+          <input type="checkbox" checked={f.mustChangePassword} onChange={e => setF({ ...f, mustChangePassword: e.target.checked })}
+            className="h-4 w-4 rounded border-[#1e2e25] bg-[#0a0f0d] accent-[#0f9d70]" />
+          Obliger l’admin à changer ce mot de passe à sa première connexion
+        </label>
         <label className="flex items-center gap-2 cursor-pointer text-sm text-[#e8ede9]">
           <input type="checkbox" checked={f.onboardingPaid} onChange={e => setF({ ...f, onboardingPaid: e.target.checked })}
             className="h-4 w-4 rounded border-[#1e2e25] bg-[#0a0f0d] accent-[#0f9d70]" />

@@ -7,7 +7,7 @@ import { registerRootComponent } from 'expo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthGate } from './navigation/RootNavigator';
-import { getUser, onAuthExpired, loadApiUrlOverride } from './services/api';
+import { getUser, onAuthExpired, onPasswordChangeRequired, loadApiUrlOverride } from './services/api';
 import { startAutoFlush } from './offline/queue';
 import { startForegroundTracking, stopForegroundTracking } from './tracking/foreground';
 import { startBackgroundTracking, stopBackgroundTracking } from './tracking/background';
@@ -29,10 +29,12 @@ function stopTracking() {
 function App() {
   const [ready, setReady] = useState(false);
   const [role, setRole] = useState<string | null>(null);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const refresh = useCallback(async () => {
     const user = await getUser();
     setRole(user?.role ?? null);
+    setMustChangePassword(Boolean(user?.mustChangePassword));
     setReady(true);
     if (user) {
       startTracking().catch(() => undefined);
@@ -53,9 +55,11 @@ function App() {
       stopTracking();
       setRole(null);
     });
+    const unsubPwd = onPasswordChangeRequired(() => setMustChangePassword(true));
     return () => {
       stopTracking();
       unsub();
+      unsubPwd();
     };
   }, [refresh]);
 
@@ -74,6 +78,7 @@ function App() {
           <AuthGate
             ready={ready}
             userRole={role}
+            mustChangePassword={mustChangePassword}
             onLogin={refresh}
             onLogout={() => {
               stopTracking();

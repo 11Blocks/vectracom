@@ -11,6 +11,9 @@ export interface JwtPayload {
   email: string;
   role: string;
   companyId: string | null;
+  iat?: number;
+  /** Id du super admin en session support (impersonation). */
+  imp?: string;
 }
 
 @Injectable()
@@ -30,10 +33,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
-      select: ['id', 'email', 'fullName', 'role', 'companyId', 'active', 'licenseType', 'licenseActive'],
+      select: [
+        'id', 'email', 'fullName', 'role', 'companyId', 'active', 'licenseType', 'licenseActive',
+        'mustChangePassword', 'passwordChangedAt',
+      ],
     });
     if (!user || !user.active) {
       throw new UnauthorizedException('Compte invalide ou désactivé');
+    }
+    // iat est en secondes : tolérance d'1 s pour le jeton ré-émis juste après le changement.
+    if (user.passwordChangedAt && payload.iat && payload.iat * 1000 < user.passwordChangedAt.getTime() - 1000) {
+      throw new UnauthorizedException('Session expirée — mot de passe modifié, reconnectez-vous');
     }
     return {
       id: user.id,
@@ -42,6 +52,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: user.role,
       companyId: user.companyId,
       licenseType: user.licenseType,
+      mustChangePassword: payload.imp ? false : user.mustChangePassword,
+      impersonatedBy: payload.imp ?? null,
     };
   }
 }

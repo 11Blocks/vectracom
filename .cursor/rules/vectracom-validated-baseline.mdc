@@ -11,8 +11,10 @@ alwaysApply: true
 - Deploy: exclure compose/env VPS ; DB Docker = `vectracom-postgres` ; `TYPEORM_SYNCHRONIZE=false`
 
 ## Comptes
-- Admin ONECOMIT: `admin@onecomit.sn` / `ChangeMe!2026`
-- Super admin Green-T: `admin@green-t.sn` / `ChangeMe!2026`
+- Admin ONECOMIT: `admin@onecomit.sn` · Super admin Green-T: `admin@green-t.sn`
+- VPS (depuis 2026-09-25) : mot de passe `salam789` pour tous les comptes
+- Local : toujours `ChangeMe!2026` (non modifié)
+- Attention : un restore du dump local sur le VPS remet `ChangeMe!2026`
 
 ## Données — pipeline (ne pas vider sans accord)
 Sources Excel réelles :
@@ -24,7 +26,24 @@ Rejouer : `SKIP_PLANNING=1 node backend/scripts/fill-platform-pipeline.cjs`
 
 Baseline locale attendue après fill : ~759 missions, 80 incidents, FACT-202606-0001, field reports, RH journaliers, dispositif, chat, KPI 80, stock levels/serials, dépenses/caisse.
 
+## VPS (aligné 2026-09-09)
+- Code déployé sans écraser `docker-compose.yml` / `.env*`
+- DB VECTRACOM = dump du baseline local validé (759 missions, 80 incidents, etc.)
+- TrackIT inchangé (ports 3000/5433…)
+- Public : https://vectracom.track-it.org
+
+## Administration plateforme (2026-09-25, local + VPS)
+- Migration `005_admin_accounts.sql` (fiche tenant, `max_users`, `archived_at`, `must_change_password`, `password_changed_at`) — appliquée VPS
+- Console : `/console/tenant?id=&tab=` (infos, utilisateurs, abonnement, historique), `/audit`, `/equipe-green-t`, `/abonnements?companyId=`
+- Tenant admin : `/parametres/utilisateurs` ; tous : `/compte` (profil + mot de passe)
+- API : `tenants/:id/users`, `users`, `console/team`, `audit-logs`, `tenants/:id/impersonate` (super_admin, jeton 30 min `imp`)
+- Rôles console : super_admin (tout), finance_admin (gère), support_admin (lecture + reset mdp)
+- Mot de passe : ≥ 8 car., lettre + chiffre ; changement → anciens JWT refusés
+- Emails : `SMTP_URL` ou `SMTP_HOST/PORT/USER/PASS` + `MAIL_FROM` (non configurés → mdp/lien affichés à copier)
+- Monitoring : collecte auto 5 min (`MONITORING_INTERVAL_MS`, `MONITORING_COLLECT=false` pour couper)
+
 ## Règles agent
 - Remplir **toute** la plateforme (pipeline produit), pas 1–2 modules isolés
 - Valider d’abord en local ; redeploy VPS seulement après OK utilisateur
 - Ne pas réutiliser ports TrackIT (3000/5433…)
+- Sur VPS : jamais drop TrackIT ; restore uniquement DB `vectracom`

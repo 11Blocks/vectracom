@@ -13,6 +13,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { SubscriptionGuard } from '../../common/guards/subscription.guard';
+import { PasswordChangeGuard } from '../../common/guards/password-change.guard';
 import { AuditInterceptor } from '../../common/interceptors/audit.interceptor';
 
 @Module({
@@ -33,6 +34,7 @@ import { AuditInterceptor } from '../../common/interceptors/audit.interceptor';
     JwtStrategy,
     // Chaîne de guards appliquée à TOUTES les routes de l'application.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PasswordChangeGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: SubscriptionGuard },

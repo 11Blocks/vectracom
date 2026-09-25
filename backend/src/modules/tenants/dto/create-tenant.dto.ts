@@ -23,4 +23,12 @@ export class CreateTenantDto {
   @IsOptional()
   @IsBoolean()
   onboardingPaid?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  mustChangePassword?: boolean;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
 }

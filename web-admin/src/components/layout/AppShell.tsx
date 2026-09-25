@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { notificationsService, settingsService } from '@/services';
+import { endSupportSession, inSupportSession } from '@/lib/support-session';
 
 function playNotifBeep() {
   try {
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const prevCount = useRef<number | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const token = localStorage.getItem('vectracom_token');
@@ -50,6 +52,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }).catch(() => { localStorage.removeItem('vectracom_token'); router.push('/'); });
     }
   }, [router]);
+
+  useEffect(() => {
+    if (user?.mustChangePassword && !pathname.startsWith('/compte')) router.replace('/compte?force=1');
+  }, [user, pathname, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -86,6 +92,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => { localStorage.clear(); router.push('/'); };
+  const leaveSupport = () => { endSupportSession(); window.location.href = '/console'; };
+  const supportMode = Boolean(user.impersonatedBy) && inSupportSession();
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0a0f0d]">
@@ -103,6 +111,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        {supportMode && (
+          <div className="flex items-center justify-between gap-3 bg-amber-500/15 border-b border-amber-500/40 px-4 py-2 text-sm text-amber-200" role="status">
+            <span>
+              Session support Green-T — connecté en tant que <b>{user.fullName}</b> ({user.companyName ?? 'tenant'}). Actions tracées, expiration 30 min.
+            </span>
+            <button onClick={leaveSupport} className="rounded-md border border-amber-400/50 px-2.5 py-1 text-xs font-medium hover:bg-amber-500/20">
+              Revenir à la console
+            </button>
+          </div>
+        )}
         <header className="flex h-14 items-center justify-between border-b border-zinc-800 bg-[#18181b] px-4" role="banner">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden p-2 rounded-lg hover:bg-zinc-800 text-zinc-400" aria-label="Menu">
@@ -116,13 +134,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {notifCount > 0 && <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white px-1">{notifCount > 99 ? '99+' : notifCount}</span>}
             </button>
             <div className="flex items-center gap-2">
-              <div className="hidden text-right sm:block">
-                <p className="text-sm font-medium text-zinc-200">{user?.fullName}</p>
-                <p className="text-xs text-zinc-500">{user?.role}</p>
-              </div>
-              <div className="w-8 h-8 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-sm font-semibold">
-                {(user?.fullName || '?').charAt(0).toUpperCase()}
-              </div>
+              <button
+                onClick={() => router.push('/compte')}
+                className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-zinc-800"
+                title="Mon compte"
+                aria-label="Mon compte"
+              >
+                <div className="hidden text-right sm:block">
+                  <p className="text-sm font-medium text-zinc-200">{user?.fullName}</p>
+                  <p className="text-xs text-zinc-500">{user?.role}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-sm font-semibold">
+                  {(user?.fullName || '?').charAt(0).toUpperCase()}
+                </div>
+              </button>
               <button onClick={logout} className="ml-1 p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300" aria-label="Déconnexion" title="Déconnexion">
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
               </button>
