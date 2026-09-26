@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, Post, Put, Res } from '@nestjs/common';
-import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { BadRequestException, Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { IsIn, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import type { Response } from 'express';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { InvoiceExtrasService } from './invoice-extras.service';
-import { InvoicesService } from './invoices.service';
 import * as XLSX from 'xlsx';
+import { INVOICE_CATEGORIES } from './entities/invoice-line.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InvoiceLine } from './entities/invoice-line.entity';
@@ -13,27 +13,28 @@ import { Invoice } from './entities/invoice.entity';
 import { Company } from '../auth/entities/company.entity';
 
 class AddExtraDto {
-  @IsString() label!: string;
+  @IsString() @MinLength(2) @MaxLength(300) label!: string;
 
-  @IsNumber()
-  @Min(0.01)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
   quantity!: number;
 
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   unitPrice!: number;
 
-  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsIn(INVOICE_CATEGORIES as unknown as string[]) category?: string;
+
+  @IsOptional() @IsString() @MaxLength(20) unit?: string;
 
   @IsOptional() @IsString() note?: string;
 }
 
 @Controller('invoices')
-@Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN, UserRole.DIRECTION)
+@Roles(UserRole.ADMIN, UserRole.DIRECTION)
 export class InvoiceExtrasController {
   constructor(
     private readonly extras: InvoiceExtrasService,
-    private readonly invoices: InvoicesService,
     @InjectRepository(InvoiceLine)
     private readonly lineRepository: Repository<InvoiceLine>,
     @InjectRepository(Invoice)
@@ -49,6 +50,7 @@ export class InvoiceExtrasController {
   }
 
   @Post(':id/extras')
+  @Roles(UserRole.ADMIN)
   addExtra(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
@@ -60,6 +62,7 @@ export class InvoiceExtrasController {
   }
 
   @Post(':id/lines/:lineId/remove')
+  @Roles(UserRole.ADMIN)
   removeLine(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
@@ -106,9 +109,10 @@ export class InvoiceExtrasController {
 
     const wb = XLSX.utils.book_new();
     const periodLabel = new Date(invoice.periodStart).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-    const totalHt = lines.reduce((s, l) => s + Number(l.total), 0);
-    const tva = Math.round((invoice.totalHt ? Number(invoice.totalHt) : totalHt) * 0.18);
-    const net = Math.round((invoice.totalHt ? Number(invoice.totalHt) : totalHt) * 1.18);
+    const totalHt = Number(invoice.totalHt);
+    const tva = Number(invoice.totalTva);
+    const net = Number(invoice.totalTtc);
+    const tvaPct = totalHt ? Math.round((tva / totalHt) * 1000) / 10 : 18;
 
     const synthRows = [
       { Rubrique: (company?.name ?? 'ONECOMIT').toUpperCase(), Montant: '' },
@@ -118,8 +122,10 @@ export class InvoiceExtrasController {
         Rubrique: cat,
         Montant: (byCategory.get(cat) ?? []).reduce((s, l) => s + Number(l.total), 0),
       })),
-      { Rubrique: 'TOTAL HT', Montant: invoice.totalHt ? Number(invoice.totalHt) : totalHt },
-      { Rubrique: 'TVA 18%', Montant: tva },
+      ...(Number(invoice.discountAmount) ? [{ Rubrique: 'REMISE', Montant: -Number(invoice.discountAmount) }] : []),
+      { Rubrique: 'TOTAL HT', Montant: totalHt },
+      { Rubrique: `TVA ${tvaPct}%`, Montant: tva },
+      ...(Number(invoice.penaltiesTotal) ? [{ Rubrique: 'PENALITES KPI', Montant: -Number(invoice.penaltiesTotal) }] : []),
       { Rubrique: 'NET A PAYER', Montant: net },
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(synthRows), 'Synthese');
@@ -161,8 +167,6 @@ export class InvoiceExtrasController {
   }
 
   private requireTenant(companyId: string | null): void {
-    if (!companyId) throw new Error('Réservé aux comptes rattachés à un tenant');
+    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
   }
 }
-
-void InvoicesService;

@@ -1,13 +1,17 @@
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
+import { PRICE_GRIDS } from '../entities/price-item.entity';
 
 export class CreatePriceItemDto {
   @IsInt()
@@ -38,8 +42,24 @@ export class CreatePriceItemDto {
   version?: string;
 
   @IsOptional()
+  @IsIn(PRICE_GRIDS as unknown as string[])
+  priceGrid?: string;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class DuplicatePriceVersionDto {
+  @IsOptional() @IsIn(PRICE_GRIDS as unknown as string[]) priceGrid?: string;
+  @IsString() @MinLength(1) fromVersion!: string;
+  @IsString() @MinLength(1) @MaxLength(20) toVersion!: string;
+  @IsOptional() @IsNumber() @Min(-90) @Max(500) percentChange?: number;
+}
+
+export class ActivatePriceVersionDto {
+  @IsOptional() @IsIn(PRICE_GRIDS as unknown as string[]) priceGrid?: string;
+  @IsString() @MinLength(1) version!: string;
 }
 
 export class UpdatePriceItemDto {

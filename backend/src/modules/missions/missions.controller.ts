@@ -33,7 +33,7 @@ import { MissionsService } from './missions.service';
 import { FieldReportService } from './field-report.service';
 import { PvRecetteService } from './pv-recette.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
-import { UpdateMissionStatusDto } from './dto/update-mission-status.dto';
+import { BulkMissionStatusDto, UpdateMissionStatusDto } from './dto/update-mission-status.dto';
 import { ReassignMissionDto } from './dto/reassign-mission.dto';
 import { UpdateMissionDetailsDto } from './dto/update-mission-details.dto';
 import { ValidateMissionDto } from './dto/validate-mission.dto';
@@ -80,7 +80,10 @@ class ListMissionsQueryDto {
   @IsOptional() @IsString() to?: string;
   @IsOptional() @IsString() @IsIn(MISSION_STATUSES as unknown as string[]) status?: string;
   @IsOptional() @IsString() typeTache?: string;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsIn(['true', 'false']) invoiced?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5000) limit?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
 }
 
 @Controller('missions')
@@ -93,6 +96,7 @@ export class MissionsController {
   ) {}
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
   create(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: CreateMissionDto,
@@ -118,6 +122,7 @@ export class MissionsController {
 
   /** Réaffectation : équipe, binôme, véhicule, créneau (règles anti double affectation). */
   @Put(':id')
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
   reassign(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -141,24 +146,46 @@ export class MissionsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  remove(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+  remove(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Param('id') id: string) {
     this.requireTenant(companyId);
-    return this.missionsService.remove(companyId!, id);
+    return this.missionsService.remove(companyId!, id, userId);
   }
 
   @Patch(':id/status')
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
   setStatus(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('role') role: string,
+    @CurrentUser('id') userId: string,
     @Param('id') id: string,
     @Body() dto: UpdateMissionStatusDto,
   ) {
     this.requireTenant(companyId);
-    return this.missionsService.setStatus(companyId!, id, dto, role);
+    return this.missionsService.setStatus(companyId!, id, dto, role, userId);
+  }
+
+  /** Validation / rejet / annulation en masse (refus renvoyés mission par mission). */
+  @Post('bulk-status')
+  @HttpCode(200)
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
+  bulkStatus(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('role') role: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: BulkMissionStatusDto,
+  ) {
+    this.requireTenant(companyId);
+    if (dto.status !== 'validee' && !dto.reason) throw new BadRequestException('Motif obligatoire pour un rejet ou une annulation');
+    return this.missionsService.bulkStatus(companyId!, dto.ids, (id) =>
+      dto.status === 'annulee'
+        ? this.missionsService.setStatus(companyId!, id, { status: 'annulee', rejectionReason: dto.reason }, role, userId)
+        : this.fieldReportService.validateInternal(companyId!, id, dto.status as 'validee' | 'rejetee', dto.reason, userId),
+    );
   }
 
   @Post(':id/field-report/step/:stepId')
   @HttpCode(200)
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
   saveStep(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -187,11 +214,12 @@ export class MissionsController {
   @Roles(UserRole.ADMIN, UserRole.DIRECTION)
   validate(
     @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
     @Param('id') id: string,
     @Body() dto: ValidateMissionDto,
   ) {
     this.requireTenant(companyId);
-    return this.fieldReportService.validateInternal(companyId!, id, dto.internalValidationStatus);
+    return this.fieldReportService.validateInternal(companyId!, id, dto.internalValidationStatus, dto.rejectionReason, userId);
   }
 
   @Post(':id/field-report/sonatel-approve')

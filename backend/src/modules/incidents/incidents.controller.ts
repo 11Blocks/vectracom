@@ -11,12 +11,13 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsISO8601, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsISO8601, IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { IncidentsService } from './incidents.service';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { AssignIncidentDto } from './dto/assign-incident.dto';
+import { UpdateIncidentDto } from './dto/update-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
 import { ResolveIncidentDto } from './dto/resolve-incident.dto';
 import {
@@ -31,6 +32,10 @@ class ListIncidentsQueryDto {
   @IsOptional() @IsString() @IsIn(INCIDENT_STATUSES as unknown as string[]) status?: string;
   @IsOptional() @IsString() @IsIn(INCIDENT_SEVERITIES as unknown as string[]) severity?: string;
   @IsOptional() @IsString() zone?: string;
+}
+
+class ReopenIncidentDto {
+  @IsString() @MinLength(3) reason!: string;
 }
 
 class GenerateSavDto {
@@ -87,6 +92,29 @@ export class IncidentsController {
       teamId: dto.teamId,
       dateMission: dto.dateMission,
     });
+  }
+
+  @Put(':id')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
+  update(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Body() dto: UpdateIncidentDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.update(companyId!, id, dto);
+  }
+
+  @Post(':id/reopen')
+  @HttpCode(200)
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
+  reopen(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Body() dto: ReopenIncidentDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.incidentsService.reopen(companyId!, id, dto.reason.trim());
   }
 
   @Put(':id/assign')

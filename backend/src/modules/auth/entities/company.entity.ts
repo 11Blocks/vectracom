@@ -72,6 +72,19 @@ export class Company extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  bankName: string | null;
+
+  /** RIB / IBAN imprimé sur les factures. */
+  @Column({ type: 'text', nullable: true })
+  bankAccount: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  logoUrl: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  invoiceFooter: string | null;
+
   /** Plafond de comptes utilisateurs actifs (null = illimité). */
   @Column({ type: 'integer', nullable: true })
   maxUsers: number | null;

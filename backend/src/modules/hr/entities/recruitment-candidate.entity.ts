@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
-export const CANDIDATE_STATUSES = ['nouveau', 'entretien', 'test_technique', 'retenu', 'rejete'] as const;
+export const CANDIDATE_STATUSES = ['nouveau', 'entretien', 'test_technique', 'retenu', 'rejete', 'embauche'] as const;
 export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number];
 
 export const CANDIDATE_POSITIONS = ['technicien', 'chauffeur', 'magasinier', 'administratif', 'chef_equipe'] as const;
@@ -53,4 +53,13 @@ export class RecruitmentCandidate extends BaseEntity {
 
   @Column({ type: 'integer', nullable: true })
   testScore: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  hiredAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  hiredEmployeeId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  hiredTechnicianId: string | null;
 }

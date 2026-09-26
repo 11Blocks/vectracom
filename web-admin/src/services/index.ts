@@ -1,13 +1,18 @@
-import { api } from '@/lib/api';
+import { api, getToken } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100/api/v1';
 const ASSET_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, '');
+/** Le backend sert aussi /uploads sous /api/uploads (seul /api/* est routé vers lui en production). */
+const UPLOADS_BASE = API_URL.replace(/\/v1\/?$/, '');
 
-/** Transforme /uploads/... en URL absolue servie par le backend. */
+/** Transforme /uploads/... en URL absolue servie par le backend (jeton joint : fichiers protégés). */
 export function absoluteUploadUrl(url: string | null | undefined): string {
   if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${ASSET_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  const path = url.startsWith('/') ? url : '/' + url;
+  if (!path.startsWith('/uploads/')) return `${ASSET_ORIGIN}${path}`;
+  const token = getToken();
+  return `${UPLOADS_BASE}${path}${token ? (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token) : ''}`;
 }
 
 export const filesService = {
@@ -33,17 +38,20 @@ export const partnersService = {
 };
 
 export const missionsService = {
-  list: (params?: Record<string, string>) => api.get('/planning/missions?' + new URLSearchParams(params || {})),
+  list: (params?: Record<string, string>) => api.get('/missions?' + new URLSearchParams(params || {})),
   get: (id: string) => api.get('/missions/' + id),
   create: (data: any) => api.post('/missions', data),
   updateStatus: (id: string, status: string, reason?: string) => api.patch('/missions/' + id + '/status', { status, rejectionReason: reason }),
+  bulkStatus: (ids: string[], status: 'validee' | 'rejetee' | 'annulee', reason?: string) =>
+    api.post('/missions/bulk-status', { ids, status, ...(reason ? { reason } : {}) }),
   reassign: (id: string, data: { teamId?: string | null; technicianIds?: string[]; vehicleId?: string | null; dateMission?: string }) => api.put('/missions/' + id, data),
   updateDetails: (id: string, data: Record<string, unknown>) => api.put('/missions/' + id + '/details', data),
   remove: (id: string) => api.delete('/missions/' + id),
   saveStep: (id: string, stepId: number | 'data', body: any) => api.post(`/missions/${id}/field-report/step/${stepId}`, { ['step' + stepId]: body }),
   saveStepData: (id: string, data: Record<string, unknown>, priceItemsUsed?: any[]) =>
     api.post(`/missions/${id}/field-report/step/data`, { data: { data, priceItemsUsed } }),
-  validate: (id: string, status: 'validee' | 'rejetee') => api.post(`/missions/${id}/field-report/validate`, { internalValidationStatus: status }),
+  validate: (id: string, status: 'validee' | 'rejetee', rejectionReason?: string) =>
+    api.post(`/missions/${id}/field-report/validate`, { internalValidationStatus: status, rejectionReason }),
   sonatelApprove: (id: string, status: 'approuve' | 'rejete') => api.post(`/missions/${id}/field-report/sonatel-approve`, { sonatelApprovalStatus: status }),
   pvRecette: (id: string) => api.getBlob(`/missions/${id}/pv-recette`),
   templates: () => api.get('/mission-templates'),
@@ -113,17 +121,22 @@ export const settingsService = {
   updateSection: (section: string, data: Record<string, unknown>, reason?: string) =>
     api.put('/settings/' + section, { data, reason }),
   journal: (limit?: number) => api.get('/settings/journal' + (limit ? '?limit=' + limit : '')),
-  auditLogs: (limit?: number) => api.get('/settings/audit-logs' + (limit ? '?limit=' + limit : '')),
+  auditLogs: (params?: Record<string, string>) => api.get('/settings/audit-logs?' + new URLSearchParams(params || {})),
   exportConfig: () => api.get('/settings/export'),
   importConfig: (data: Record<string, unknown>) => api.post('/settings/import', { data }),
   restoreDefaults: () => api.post('/settings/restore-defaults', {}),
+  getCompanyProfile: () => api.get('/company-profile'),
+  updateCompanyProfile: (data: Record<string, string | null>) => api.put('/company-profile', data),
 };
 
 export const cashBoxService = {
   list: (period?: string) => api.get('/cash-box' + (period ? '?period=' + period : '')),
-  create: (data: { type: string; rubrique: string; amount: number; period?: string; beneficiary?: string; teamId?: string; vehicleId?: string; note?: string }) =>
+  create: (data: { type: string; rubrique?: string; amount: number; entryDate?: string; beneficiary?: string; teamId?: string; vehicleId?: string; note?: string }) =>
     api.post('/cash-box', data),
-  repay: (id: string, amount: number) => api.post(`/cash-box/${id}/repay`, { amount }),
+  update: (id: string, data: { rubrique?: string; amount?: number; entryDate?: string; beneficiary?: string | null; note?: string | null }) =>
+    api.put('/cash-box/' + id, data),
+  cancel: (id: string, reason: string) => api.post(`/cash-box/${id}/cancel`, { reason }),
+  repay: (id: string, amount: number, entryDate?: string) => api.post(`/cash-box/${id}/repay`, { amount, ...(entryDate ? { entryDate } : {}) }),
   summary: (period: string) => api.get('/cash-box/summary?period=' + period),
   material: (period: string) => api.get('/cash-box/material?period=' + period),
 };
@@ -156,7 +169,7 @@ export const dispositifService = {
 
 export const invoiceExtras = {
   presets: () => api.get('/invoices/extras/presets'),
-  addExtra: (invoiceId: string, data: { label: string; quantity: number; unitPrice: number; category?: string; note?: string }) =>
+  addExtra: (invoiceId: string, data: { label: string; quantity: number; unitPrice: number; category?: string; unit?: string; note?: string }) =>
     api.post(`/invoices/${invoiceId}/extras`, data),
   removeLine: (invoiceId: string, lineId: string) => api.post(`/invoices/${invoiceId}/lines/${lineId}/remove`, {}),
   exportAttachement: (invoiceId: string) => api.getBlob(`/invoices/${invoiceId}/export-attachement`),
@@ -169,6 +182,7 @@ export const planningService = {
     return api.upload('/planning/import/preview', fd);
   },
   confirm: (fileId: string, selectedRows?: string[]) => api.post('/planning/import/confirm', { fileId, selectedRows }),
+  importHistory: () => api.get('/planning/import/history'),
   getMappings: () => api.get('/planning/import/mappings'),
   updateMappings: (mappings: any[]) => api.put('/planning/import/mappings', { mappings }),
 };
@@ -189,6 +203,11 @@ export const stockService = {
   updateWarehouse: (id: string, data: any) => api.put('/warehouses/' + id, data),
   deleteWarehouse: (id: string) => api.delete('/warehouses/' + id),
   createMovement: (data: any) => api.post('/stock-movements', data),
+  cancelMovement: (id: string, reason: string) => api.post('/stock-movements/' + id + '/cancel', { reason }),
+  inventory: (warehouseId: string, lines: { stockItemId: string; countedQuantity: number }[], note?: string) =>
+    api.post('/stock-movements/inventory', { warehouseId, lines, ...(note ? { note } : {}) }),
+  listSerials: (itemId: string) => api.get('/stock-items/' + itemId + '/serials'),
+  createSerial: (itemId: string, serialNumber: string) => api.post('/stock-items/' + itemId + '/serials', { serialNumber }),
   listMovements: (params?: Record<string, string>) => api.get('/stock-movements?' + new URLSearchParams(params || {})),
   listPriceItems: (params?: Record<string, string>) => api.get('/price-items?' + new URLSearchParams(params || {})),
   searchPriceItems: (q: string) => api.get('/price-items/search?q=' + encodeURIComponent(q)),
@@ -228,6 +247,8 @@ export const incidentsService = {
   list: (params?: Record<string, string>) => api.get('/incidents?' + new URLSearchParams(params || {})),
   get: (id: string) => api.get('/incidents/' + id),
   create: (data: any) => api.post('/incidents', data),
+  update: (id: string, data: any) => api.put('/incidents/' + id, data),
+  reopen: (id: string, reason: string) => api.post('/incidents/' + id + '/reopen', { reason }),
   assign: (id: string, data: any) => api.put('/incidents/' + id + '/assign', data),
   updateStatus: (id: string, status: string) => api.put('/incidents/' + id + '/status', { status }),
   resolve: (id: string, data: any) => api.put('/incidents/' + id + '/resolve', data),
@@ -274,12 +295,27 @@ export const invoicesService = {
   list: (params?: Record<string, string>) => api.get('/invoices?' + new URLSearchParams(params || {})),
   get: (id: string) => api.get('/invoices/' + id),
   preview: (id: string) => api.get('/invoices/' + id + '/preview'),
-  generate: (periodStart: string, periodEnd: string) => api.post('/invoices/generate', { periodStart, periodEnd }),
+  generate: (periodStart: string, periodEnd: string, clientId?: string) =>
+    api.post('/invoices/generate', { periodStart, periodEnd, ...(clientId ? { clientId } : {}) }),
+  createManual: (data: any) => api.post('/invoices/manual', data),
+  updateHeader: (id: string, data: any) => api.put('/invoices/' + id + '/header', data),
   correct: (id: string, lines: any[]) => api.put('/invoices/' + id + '/correct', { lines }),
   finalize: (id: string, notes?: string) => api.post('/invoices/' + id + '/finalize', { notes }),
+  send: (id: string) => api.post('/invoices/' + id + '/send', {}),
+  addPayment: (id: string, data: { amount: number; paidAt: string; method?: string; reference?: string; note?: string }) =>
+    api.post('/invoices/' + id + '/payments', data),
+  removePayment: (id: string, paymentId: string) => api.delete('/invoices/' + id + '/payments/' + paymentId),
+  cancel: (id: string, reason: string) => api.post('/invoices/' + id + '/cancel', { reason }),
+  missions: (id: string) => api.get('/invoices/' + id + '/missions'),
   exportPdf: (id: string) => api.postBlob("/invoices/" + id + "/export-pdf"),
   exportExcel: (id: string) => api.postBlob("/invoices/" + id + "/export-excel"),
   delete: (id: string) => api.delete('/invoices/' + id),
+};
+
+export const clientsService = {
+  list: () => api.get('/clients'),
+  create: (data: any) => api.post('/clients', data),
+  update: (id: string, data: any) => api.put('/clients/' + id, data),
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -311,9 +347,10 @@ export const kpiService = {
 export const dailyWorkersService = {
   list: (teamId?: string) => api.get('/daily-workers' + (teamId ? '?teamId=' + teamId : '')),
   create: (data: { fullName: string; teamId: string; phone?: string; dailyRate?: number }) => api.post('/daily-workers', data),
-  update: (id: string, data: { dailyRate?: number; active?: boolean; phone?: string }) => api.put('/daily-workers/' + id, data),
+  update: (id: string, data: { fullName?: string; teamId?: string; dailyRate?: number; active?: boolean; phone?: string }) => api.put('/daily-workers/' + id, data),
   remove: (id: string) => api.delete('/daily-workers/' + id),
   clockIn: (workerIds: string[], day: string, missionId?: string) => api.post('/daily-attendance/clock-in', { workerIds, day, missionId }),
+  removeClockIn: (workerId: string, day: string) => api.delete('/daily-attendance/' + workerId + '/' + day),
   timesheet: (from: string, to: string, teamId?: string) => api.get('/daily-attendance/timesheet?from=' + from + '&to=' + to + (teamId ? '&teamId=' + teamId : '')),
 };
 
@@ -324,6 +361,7 @@ export const recruitmentService = {
   update: (id: string, data: { status?: string; notes?: string; interviewDate?: string | null; testScore?: number | null; documentType?: string; documentName?: string; documentUrl?: string }) =>
     api.put('/recruitment/' + id, data),
   remove: (id: string) => api.delete('/recruitment/' + id),
+  hire: (id: string, data: { teamId?: string; matricule?: string; createTechnician?: boolean }) => api.post('/recruitment/' + id + '/hire', data),
 };
 
 export const hrService = {
@@ -335,6 +373,7 @@ export const hrService = {
   createLeave: (data: any) => api.post('/leave-requests', data),
   approveLeave: (id: string) => api.put('/leave-requests/' + id + '/approve'),
   refuseLeave: (id: string) => api.put('/leave-requests/' + id + '/refuse'),
+  cancelLeave: (id: string) => api.delete('/leave-requests/' + id),
   listAttendance: (params?: Record<string, string>) => api.get('/attendance?' + new URLSearchParams(params || {})),
   saveAttendance: (data: any) => api.post('/attendance', data),
   validateAttendance: (id: string) => api.put('/attendance/' + id + '/validate'),
@@ -350,6 +389,21 @@ export const accountingService = {
   updateExpense: (id: string, data: any) => api.put('/expenses/' + id, data),
   deleteExpense: (id: string) => api.delete('/expenses/' + id),
   summary: (month?: string) => api.get('/expenses/summary' + (month ? '?month=' + month : '')),
+};
+
+export const priceItemsService = {
+  versions: () => api.get('/price-items/versions'),
+  list: (params: { priceGrid?: string; version?: string; category?: string }) =>
+    api.get('/price-items?' + new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][])),
+  create: (data: { itemNumber: number; designation: string; unit: string; unitPrice: number; category?: string; subCategory?: string; version?: string; priceGrid?: string }) =>
+    api.post('/price-items', data),
+  update: (itemNumber: number, version: string, priceGrid: string, data: Record<string, unknown>) =>
+    api.put(`/price-items/${itemNumber}?version=${encodeURIComponent(version)}&priceGrid=${priceGrid}`, data),
+  remove: (itemNumber: number, version: string, priceGrid: string) =>
+    api.delete(`/price-items/${itemNumber}?version=${encodeURIComponent(version)}&priceGrid=${priceGrid}`),
+  duplicateVersion: (data: { priceGrid: string; fromVersion: string; toVersion: string; percentChange?: number }) =>
+    api.post('/price-items/versions/duplicate', data),
+  activateVersion: (priceGrid: string, version: string) => api.post('/price-items/versions/activate', { priceGrid, version }),
 };
 
 // ═══════════════════════════════════════════════════════════

@@ -18,8 +18,8 @@ export class PlanningService {
     const qb = this.missionRepository
       .createQueryBuilder('mission')
       .where('mission.company_id = :companyId', { companyId })
-      .orderBy('mission.date_mission', 'ASC')
-      .take(500);
+      .orderBy('mission.date_mission', filters.from || filters.to ? 'ASC' : 'DESC')
+      .take(2000);
 
     if (filters.from) qb.andWhere('mission.date_mission >= :from', { from: filters.from });
     if (filters.to) qb.andWhere('mission.date_mission <= :to', { to: filters.to });

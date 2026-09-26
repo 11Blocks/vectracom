@@ -159,6 +159,10 @@ export class NotificationsService {
     return this.tokenRepository.save(existing);
   }
 
+  userContact(companyId: string, userId: string) {
+    return this.userRepository.findOne({ where: { companyId, id: userId }, select: ['id', 'email', 'phone'] });
+  }
+
   /** Utilisateurs à notifier selon le rôle (managers pour les échéances, magasiniers pour le stock). */
   async usersByRoles(companyId: string, roles: string[]) {
     return this.userRepository

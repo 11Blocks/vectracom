@@ -11,6 +11,7 @@ export const STATUS_META: Record<string, { label: string; cls: string; dot: stri
   validee: { label: 'Validée', cls: 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/40', dot: '#0f9d70' },
   rejetee: { label: 'Rejetée', cls: 'bg-[#C0392B]/20 text-[#C0392B] border-[#C0392B]/30', dot: '#C0392B' },
   a_completer: { label: 'À compléter', cls: 'bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30', dot: '#f5a623' },
+  annulee: { label: 'Annulée', cls: 'bg-slate-500/15 text-slate-400 border-slate-500/30', dot: '#64748b' },
 };
 
 /** Couleur par type de tâche — repère visuel instantané dans les tableaux. */

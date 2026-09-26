@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Loader2, X, Sparkles } from 'lucide-react';
+import { AiModeBadge } from '@/components/AiModeBadge';
 
 /* ═══════════════════════════════════════════════════════════
    TOAST SYSTEM
@@ -329,6 +330,7 @@ export function AiBlock({ children, title = 'Recommandations IA' }: { children: 
           <Sparkles size={14} strokeWidth={2} className="text-[#f5a623]" />
         </span>
         <p className="text-sm font-semibold text-[#f5a623]">{title}</p>
+        <AiModeBadge />
       </div>
       {children}
     </div>

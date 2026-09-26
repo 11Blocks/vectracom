@@ -84,7 +84,7 @@ function Content() {
       toast({ title: 'Mot de passe modifié', description: 'Vos autres sessions ont été déconnectées', variant: 'success' });
       if (forced) {
         const role = stored.role as string | undefined;
-        window.location.href = role && ['super_admin', 'finance_admin', 'support_admin'].includes(role) ? '/console' : '/dashboard';
+        window.location.href = role && ['super_admin', 'finance_admin', 'support_admin'].includes(role) ? '/console' : role === 'magasinier' ? '/stock' : '/dashboard';
       } else {
         setMe((m: any) => ({ ...m, mustChangePassword: false, passwordChangedAt: new Date().toISOString() }));
       }

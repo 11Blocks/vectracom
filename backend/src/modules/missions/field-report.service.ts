@@ -17,6 +17,7 @@ import { Step5EchangeSavDto } from './dto/field-report-step5-echange-sav.dto';
 import { Step6ClotureDto } from './dto/field-report-step6-cloture.dto';
 import { FieldReportDataDto } from './dto/field-report-data.dto';
 import { GeolocationService } from '../geolocation/geolocation.service';
+import { AuditService } from '../../common/audit/audit.service';
 
 /** Seuil d'alerte dBm du cahier des charges : -25 dBm. */
 const DBM_ALERT_THRESHOLD = -25;
@@ -36,6 +37,7 @@ export class FieldReportService {
     private readonly missionRepository: Repository<Mission>,
     private readonly qualityScore: QualityScoreService,
     private readonly geolocationService: GeolocationService,
+    private readonly audit: AuditService,
   ) {}
 
   async getOrCreate(companyId: string, missionId: string): Promise<MissionFieldReport> {
@@ -56,6 +58,9 @@ export class FieldReportService {
 
   async saveStep(companyId: string, missionId: string, stepId: string, dto: unknown) {
     const report = await this.getOrCreate(companyId, missionId);
+    if (report.internalValidationStatus === 'validee') {
+      throw new BadRequestException('Rapport validé : il est verrouillé (faites-le rejeter pour le compléter)');
+    }
 
     switch (stepId) {
       case '1':
@@ -160,6 +165,8 @@ export class FieldReportService {
     if (dto.fieldStatus === 'echec' && !dto.failureReason) {
       throw new BadRequestException('Motif d\'échec obligatoire quand fieldStatus = echec');
     }
+    const firstClosure = !report.fieldStatus;
+    if (report.internalValidationStatus === 'rejetee') report.internalValidationStatus = 'en_attente';
     report.fieldStatus = dto.fieldStatus as MissionFieldReport['fieldStatus'];
     report.failureReason = dto.failureReason ?? null;
     report.observations = dto.observations ?? null;
@@ -168,12 +175,9 @@ export class FieldReportService {
     report.savAction = dto.savAction ?? null;
     report.savOutcome = dto.savOutcome ?? null;
 
-    const mission = await this.missionRepository.findOne({ where: { id: report.missionId } });
-    if (mission) {
-      await this.missionRepository.update(
-        { id: mission.id },
-        { nbsi: (mission.nbsi ?? 0) + 1, codeOperation: mission.codeOperation },
-      );
+    const mission = await this.missionRepository.findOne({ where: { companyId, id: report.missionId } });
+    if (mission && firstClosure) {
+      await this.missionRepository.update({ id: mission.id }, { nbsi: (mission.nbsi ?? 0) + 1 });
     }
 
     const result = this.qualityScore.compute(report);
@@ -185,15 +189,26 @@ export class FieldReportService {
     );
 
     await this.reportRepository.save(report);
-    await this.missionRepository.update(
-      { companyId, id: report.missionId },
-      { status: 'terminee' },
-    );
+    if (mission && ['planifiee', 'en_cours', 'a_completer'].includes(mission.status)) {
+      await this.missionRepository.update({ companyId, id: report.missionId }, { status: 'terminee' });
+    }
     return this.reportRepository.findOne({ where: { id: report.id } });
   }
 
+  /**
+   * Formulaire dynamique (mobile) : les réponses sont conservées dans `data` et, pour les champs
+   * standards (mêmes ids que les colonnes), recopiées dans les étapes 1-6 pour que le web les affiche.
+   */
   private async saveData(companyId: string, report: MissionFieldReport, dto: FieldReportDataDto) {
+    const d = dto.data ?? {};
+    if (!report.sstValidatedAt && d.sstChecklist && typeof d.sstChecklist === 'object') {
+      report = await this.saveStep1(report, {
+        sstChecklist: d.sstChecklist as Record<string, boolean>,
+        sstPhotoUrl: firstString(d.sstPhotoUrl),
+      });
+    }
     this.assertSstValidated(report);
+    this.projectTemplateAnswers(report, d);
     report.data = { ...report.data, ...dto.data };
     if (dto.priceItemsUsed !== undefined) {
       report.priceItemsUsed = dto.priceItemsUsed;
@@ -209,7 +224,47 @@ export class FieldReportService {
     if (coords) {
       await this.syncGeoposition(companyId, report.missionId, coords.lat, coords.lon);
     }
+    if (d.fieldStatus === 'succes' || d.fieldStatus === 'echec') {
+      return this.saveStep6(companyId, saved, {
+        fieldStatus: d.fieldStatus,
+        failureReason: firstString(d.failureReason),
+        observations: firstString(d.observations),
+        signatureTechnicianUrl: firstString(d.signatureTechnicianUrl),
+        signatureClientUrl: firstString(d.signatureClientUrl),
+      } as Step6ClotureDto);
+    }
     return saved;
+  }
+
+  private projectTemplateAnswers(report: MissionFieldReport, d: Record<string, unknown>) {
+    const text = (k: string) => firstString(d[k]);
+    const now = new Date();
+    if (text('interventionType') !== undefined || text('equipmentCode') !== undefined || d.gps !== undefined) {
+      report.interventionType = (text('interventionType') as MissionFieldReport['interventionType']) ?? report.interventionType;
+      report.equipmentCode = text('equipmentCode') ?? report.equipmentCode;
+      report.identificationAt ??= now;
+    }
+    if (text('actionRealized') !== undefined || text('initialEquipmentState') !== undefined || d.dbmMeasurement != null) {
+      report.initialEquipmentState = text('initialEquipmentState') ?? report.initialEquipmentState;
+      report.actionRealized = text('actionRealized') ?? report.actionRealized;
+      const dbm = Number(d.dbmMeasurement);
+      if (d.dbmMeasurement != null && Number.isFinite(dbm)) {
+        report.dbmMeasurement = String(dbm);
+        report.dbmOutOfNorm = dbm < DBM_ALERT_THRESHOLD;
+      }
+      report.techniqueAt ??= now;
+    }
+    const photoKeys = ['photoSiteUrl', 'photoPboInteriorUrl', 'photoPboClosedUrl', 'photoPtoModemUrl'] as const;
+    if (photoKeys.some((k) => d[k] !== undefined)) {
+      for (const k of photoKeys) report[k] = text(k) ?? report[k];
+      report.photosAt ??= now;
+    }
+    if (Array.isArray(d.materialsConsumed)) {
+      report.materialsConsumed = (d.materialsConsumed as Array<Record<string, unknown>>)
+        .filter((l) => l && String(l.designation ?? '').trim() && Number(l.quantity) > 0)
+        .map((l) => ({ designation: String(l.designation).trim(), quantity: Math.max(1, Math.round(Number(l.quantity))) }));
+      report.materielAt ??= now;
+    }
   }
 
   /**
@@ -234,17 +289,32 @@ export class FieldReportService {
 
   // ----- Double validation -----
 
-  async validateInternal(companyId: string, missionId: string, status: 'validee' | 'rejetee') {
+  async validateInternal(companyId: string, missionId: string, status: 'validee' | 'rejetee', reason?: string, userId: string | null = null) {
+    const mission = await this.missionRepository.findOne({ where: { companyId, id: missionId } });
+    if (!mission) throw new NotFoundException('Mission introuvable');
+    if (mission.invoiceId) throw new BadRequestException('Mission déjà facturée');
+    if (mission.status !== 'terminee') {
+      throw new BadRequestException(`Validation impossible : mission au statut ${mission.status} (attendu : terminee)`);
+    }
     const report = await this.getOrCreate(companyId, missionId);
     if (!report.fieldStatus) {
       throw new BadRequestException('Le rapport terrain doit être clôturé avant validation');
+    }
+    if (status === 'rejetee' && !reason?.trim()) {
+      throw new BadRequestException('Motif de rejet obligatoire');
     }
     report.internalValidationStatus = status;
     await this.reportRepository.save(report);
     await this.missionRepository.update(
       { companyId, id: missionId },
-      { status: status === 'validee' ? 'validee' : 'rejetee' },
+      status === 'validee'
+        ? { status: 'validee', rejectionReason: null }
+        : { status: 'rejetee', rejectionReason: reason!.trim(), rejectedAt: new Date() },
     );
+    await this.audit.log({
+      companyId, actorId: userId, action: 'mission.status', entityType: 'mission', entityId: missionId,
+      payload: { from: 'terminee', to: status, ...(reason ? { reason: reason.trim() } : {}) },
+    });
     return this.reportRepository.findOne({ where: { id: report.id } });
   }
 
@@ -262,6 +332,14 @@ export class FieldReportService {
     await this.reportRepository.save(report);
     return this.reportRepository.findOne({ where: { id: report.id } });
   }
+}
+
+/** Réponse texte ou 1re entrée d'une liste (photos : tableau d'URL). */
+function firstString(value: unknown): string | undefined {
+  const v = Array.isArray(value) ? value[0] : value;
+  if (v == null) return undefined;
+  const s = String(v).trim();
+  return s === '' ? undefined : s;
 }
 
 /** Extrait lat/lng depuis les réponses template mobile (clés gps / gpsLatitude…). */

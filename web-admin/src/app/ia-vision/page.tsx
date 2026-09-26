@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, EmptyState, Input, AiBlock, useToast, ConfirmDialog } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { iaVisionService } from '@/services';
+import { iaVisionService, absoluteUploadUrl } from '@/services';
 import {
   Eye, Upload, Loader2, Trash2, CheckCircle2, XCircle, Link2, ScanSearch,
   Image as ImageIcon, AlertTriangle, FileText, History,
@@ -25,8 +25,6 @@ const FLAG_LABELS: Record<string, string> = {
   format_inattendu: 'Format inattendu',
   url_non_securisee: 'URL non sécurisée',
 };
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3100';
 
 export default function Page() {
   return <AppShell><Content /></AppShell>;
@@ -137,7 +135,7 @@ function Content() {
             <div className="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-4 rounded-xl border border-[#f5a623]/25 bg-[#f5a623]/[0.04] p-4">
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={API_BASE + lastUpload.imageUrl} alt={lastUpload.originalName}
+                <img src={absoluteUploadUrl(lastUpload.imageUrl)} alt={lastUpload.originalName}
                   className="w-full h-32 object-cover rounded-lg border border-[#1e2e25]" />
               </div>
               <div className="space-y-2">
@@ -181,7 +179,7 @@ function Content() {
               {uploadList.map((u: any) => (
                 <div key={u.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#172019] transition-colors">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={API_BASE + u.imageUrl} alt={u.originalName} className="h-12 w-12 object-cover rounded-md border border-[#1e2e25] shrink-0" />
+                  <img src={absoluteUploadUrl(u.imageUrl)} alt={u.originalName} className="h-12 w-12 object-cover rounded-md border border-[#1e2e25] shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-xs text-[#e8ede9] truncate">{u.originalName}</p>
@@ -194,7 +192,7 @@ function Content() {
                       {u.flags.length > 0 && ` · ${u.flags.map((f: string) => FLAG_LABELS[f] ?? f).join(', ')}`}
                     </p>
                   </div>
-                  <a href={API_BASE + u.imageUrl} target="_blank" rel="noreferrer" className="text-[#7a8f80] hover:text-[#0f9d70] shrink-0" title="Ouvrir l'image"><ImageIcon size={13} /></a>
+                  <a href={absoluteUploadUrl(u.imageUrl)} target="_blank" rel="noreferrer" className="text-[#7a8f80] hover:text-[#0f9d70] shrink-0" title="Ouvrir l'image"><ImageIcon size={13} /></a>
                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-[#7a8f80] hover:text-[#C0392B] shrink-0" onClick={() => setDeleteId(u.id)}>
                     <Trash2 size={12} />
                   </Button>

@@ -1,20 +1,26 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashBoxService } from './cash-box.service';
+import { EXPENSE_CATEGORIES } from './entities/expense.entity';
+
+const RUBRIQUES = [...EXPENSE_CATEGORIES, 'approvisionnement'] as string[];
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 class CreateEntryDto {
-  @IsOptional() @IsString() period?: string;
+  @IsOptional() @Matches(MONTH) period?: string;
 
-  @IsIn(['appro', 'depense', 'remboursement_pret'])
+  @IsOptional() @IsDateString() entryDate?: string;
+
+  @IsIn(['appro', 'depense'])
   type!: string;
 
-  @IsString() rubrique!: string;
+  @IsOptional() @IsIn(RUBRIQUES) rubrique?: string;
 
-  @IsNumber() @Min(0.01) amount!: number;
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) amount!: number;
 
-  @IsOptional() @IsString() beneficiary?: string;
+  @IsOptional() @IsString() @MaxLength(200) beneficiary?: string;
 
   @IsOptional() @IsUUID() teamId?: string;
 
@@ -23,49 +29,95 @@ class CreateEntryDto {
   @IsOptional() @IsString() note?: string;
 }
 
+class UpdateEntryDto {
+  @IsOptional() @IsDateString() entryDate?: string;
+  @IsOptional() @IsIn(RUBRIQUES) rubrique?: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) amount?: number;
+  @IsOptional() @IsString() @MaxLength(200) beneficiary?: string | null;
+  @IsOptional() @IsUUID() teamId?: string | null;
+  @IsOptional() @IsUUID() vehicleId?: string | null;
+  @IsOptional() @IsString() note?: string | null;
+}
+
 class RepayDto {
-  @IsNumber() @Min(0.01) amount!: number;
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) amount!: number;
+  @IsOptional() @IsDateString() entryDate?: string;
+}
+
+class CancelEntryDto {
+  @IsString() @MinLength(3) reason!: string;
+}
+
+class PeriodQueryDto {
+  @IsOptional() @Matches(MONTH, { message: 'Format de mois attendu : YYYY-MM' }) period?: string;
 }
 
 @Controller('cash-box')
-@Roles(UserRole.ADMIN, UserRole.FINANCE_ADMIN, UserRole.DIRECTION)
+@Roles(UserRole.ADMIN, UserRole.DIRECTION)
 export class CashBoxController {
   constructor(private readonly cashBox: CashBoxService) {}
 
   @Get()
-  list(@CurrentUser('companyId') companyId: string | null, @Query('period') period?: string) {
+  list(@CurrentUser('companyId') companyId: string | null, @Query() q: PeriodQueryDto) {
     this.requireTenant(companyId);
-    return this.cashBox.list(companyId!, period);
+    return this.cashBox.list(companyId!, q.period);
   }
 
   @Post()
-  create(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateEntryDto) {
+  @Roles(UserRole.ADMIN)
+  create(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Body() dto: CreateEntryDto) {
     this.requireTenant(companyId);
-    return this.cashBox.create(companyId!, dto);
+    return this.cashBox.create(companyId!, dto, userId);
   }
 
-  @Post(':id/repay')
-  repay(
-    @CurrentUser('companyId') companyId: string | null,
-    @Param('id') id: string,
-    @Body() dto: RepayDto,
-  ) {
-    this.requireTenant(companyId);
-    return this.cashBox.repay(companyId!, id, dto.amount);
-  }
-
-  /** Synthèse du mois par rubrique (sources manuelles + automatiques). */
+  /** Synthèse du mois : solde, entrées/sorties, prêts, coût complet. */
   @Get('summary')
-  summary(@CurrentUser('companyId') companyId: string | null, @Query('period') period?: string) {
+  summary(@CurrentUser('companyId') companyId: string | null, @Query() q: PeriodQueryDto) {
     this.requireTenant(companyId);
-    return this.cashBox.summary(companyId!, period ?? new Date().toISOString().slice(0, 7));
+    return this.cashBox.summary(companyId!, q.period ?? new Date().toISOString().slice(0, 7));
   }
 
   /** Comptabilité matière : mouvements valorisés au bordereau. */
   @Get('material')
-  material(@CurrentUser('companyId') companyId: string | null, @Query('period') period?: string) {
+  material(@CurrentUser('companyId') companyId: string | null, @Query() q: PeriodQueryDto) {
     this.requireTenant(companyId);
-    return this.cashBox.material(companyId!, period ?? new Date().toISOString().slice(0, 7));
+    return this.cashBox.material(companyId!, q.period ?? new Date().toISOString().slice(0, 7));
+  }
+
+  @Put(':id')
+  @Roles(UserRole.ADMIN)
+  update(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateEntryDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.cashBox.update(companyId!, id, dto, userId);
+  }
+
+  @Post(':id/cancel')
+  @Roles(UserRole.ADMIN)
+  cancel(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelEntryDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.cashBox.cancel(companyId!, id, dto.reason, userId);
+  }
+
+  @Post(':id/repay')
+  @Roles(UserRole.ADMIN)
+  repay(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RepayDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.cashBox.repay(companyId!, id, dto.amount, dto.entryDate, userId);
   }
 
   private requireTenant(companyId: string | null): void {

@@ -3,12 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Modal, Input, Select, useToast, ConfirmDialog } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast, ConfirmDialog } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { missionsService, teamsService, techniciansService, vehiclesService, partnersService } from '@/services';
-import { api } from '@/lib/api';
 import { STATUS_META, typeMeta, statusMeta } from '@/lib/mission-meta';
-import { ClipboardCheck, Plus, Search, Loader2, ArrowRight, MapPin, CheckCircle2, XCircle, UsersRound, Edit, Trash2 } from 'lucide-react';
+import { downloadCsv } from '@/lib/csv';
+import { ClipboardCheck, Plus, Search, Loader2, ArrowRight, MapPin, CheckCircle2, XCircle, UsersRound, Edit, Trash2, RotateCcw, Ban, Download, X } from 'lucide-react';
+
+type ReasonTarget = { mode: 'single' | 'bulk'; ids: string[]; status: 'rejetee' | 'annulee'; title: string };
+type BulkResult = { status: string; ok: number; failed: { id: string; clientSite?: string | null; error: string }[] };
 
 const MISSION_TYPES = ['INSTALLATION', 'SURVEY', 'SURVEY_OSM', 'SAV', 'INFRA', 'OSM', 'GC', 'PLANTATION', 'DEVOIEMENT', 'DEPLOIEMENT', 'DENSIFICATION'];
 
@@ -28,7 +31,7 @@ function Content() {
   const [showCreate, setShowCreate] = useState(false);
 
   const { data, loading, refetch } = useQuery(
-    () => api.get('/planning/missions' + (statusFilter ? '?status=' + statusFilter : '')),
+    () => missionsService.list(statusFilter ? { status: statusFilter } : {}),
     [statusFilter],
   );
   const missions = Array.isArray(data) ? data : [];
@@ -42,13 +45,66 @@ function Content() {
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const [reasonTarget, setReasonTarget] = useState<ReasonTarget | null>(null);
+  const [reason, setReason] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
+  const [confirmBulkValidate, setConfirmBulkValidate] = useState(false);
+
+  useEffect(() => { setSelected(new Set()); }, [statusFilter]);
+
+  const closeReason = () => { setReasonTarget(null); setReason(''); };
+
   const decideMut = useMutation(
-    ({ id, status }: { id: string; status: string }) => missionsService.updateStatus(id, status),
+    ({ id, status, reason }: { id: string; status: string; reason?: string }) => missionsService.updateStatus(id, status, reason),
     {
-      onSuccess: () => { toast({ title: 'Décision enregistrée', variant: 'success' }); refetch(); },
+      onSuccess: () => { toast({ title: 'Décision enregistrée', variant: 'success' }); closeReason(); refetch(); },
       onError: (e: any) => toast({ title: 'Action refusée', description: e.message, variant: 'error' }),
     },
   );
+
+  const bulkMut = useMutation(
+    ({ ids, status, reason }: { ids: string[]; status: 'validee' | 'rejetee' | 'annulee'; reason?: string }) =>
+      missionsService.bulkStatus(ids, status, reason).then((r: any) => ({ ...r, status })),
+    {
+      onSuccess: (r: any) => {
+        closeReason(); setConfirmBulkValidate(false); setSelected(new Set());
+        setBulkResult({ status: r.status, ok: Number(r.ok ?? 0), failed: r.failed ?? [] });
+        refetch();
+      },
+      onError: (e: any) => toast({ title: 'Action groupée refusée', description: e.message, variant: 'error' }),
+    },
+  );
+
+  const selectedMissions = list.filter(m => selected.has(m.id));
+  const selectedTerminated = selectedMissions.filter(m => m.status === 'terminee' && !m.invoiceId);
+  const selectedCancellable = selectedMissions.filter(m => ['planifiee', 'en_cours', 'a_completer'].includes(m.status));
+  const allVisibleSelected = list.length > 0 && list.every(m => selected.has(m.id));
+  const toggleOne = (id: string) => setSelected(prev => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n;
+  });
+  const toggleAll = () => setSelected(allVisibleSelected ? new Set() : new Set(list.map(m => m.id)));
+
+  const exportCsv = () => {
+    const rows: (string | number | null | undefined)[][] = [
+      ['Dossier', 'Client / Site', 'Type', 'Zone', 'SR/Plaque', 'Date', 'Équipe', 'Statut', 'Facturée', 'Motif'],
+      ...list.map(m => [
+        m.sonatelDossierNumber, m.clientSite, m.typeTache, m.zone, m.srPlaque,
+        m.dateMission ? String(m.dateMission).slice(0, 10) : '',
+        m.importMeta?.teamLabel ?? m.team?.name, statusMeta(m.status).label,
+        m.invoiceId ? 'oui' : 'non', m.cancelReason ?? m.rejectionReason ?? '',
+      ]),
+    ];
+    downloadCsv(`missions_${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  };
+
+  const submitReason = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reasonTarget) return;
+    const r = reason.trim();
+    if (reasonTarget.mode === 'single') decideMut.mutate({ id: reasonTarget.ids[0], status: reasonTarget.status, reason: r });
+    else bulkMut.mutate({ ids: reasonTarget.ids, status: reasonTarget.status, reason: r });
+  };
 
   const deleteMut = useMutation((id: string) => missionsService.remove(id), {
     onSuccess: () => { toast({ title: 'Mission supprimée', variant: 'success' }); setDeleteId(null); refetch(); },
@@ -69,7 +125,10 @@ function Content() {
             <p className="text-xs text-[#7a8f80]">{missions.length} mission(s) — cliquez une ligne pour le formulaire terrain</p>
           </div>
         </div>
-        <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Créer une mission</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportCsv} disabled={!list.length}><Download size={15} /> Export CSV</Button>
+          <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Créer une mission</Button>
+        </div>
       </div>
 
       {/* Onglets par statut */}
@@ -96,6 +155,29 @@ function Content() {
           className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] placeholder:text-[#7a8f80] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50" />
       </div>
 
+      {canDecide && selected.size > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-[#0f9d70]/40 bg-[#0f9d70]/10 px-3 py-2">
+          <span className="text-sm text-[#e8ede9] font-medium">{selected.size} sélectionnée(s)</span>
+          <span className="text-xs text-[#7a8f80]">
+            dont {selectedTerminated.length} terminée(s) non facturée(s), {selectedCancellable.length} annulable(s)
+          </span>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" disabled={!selectedTerminated.length || bulkMut.loading} onClick={() => setConfirmBulkValidate(true)}>
+              <CheckCircle2 size={13} /> Valider ({selectedTerminated.length})
+            </Button>
+            <Button size="sm" variant="danger" disabled={!selectedTerminated.length || bulkMut.loading}
+              onClick={() => setReasonTarget({ mode: 'bulk', ids: selectedTerminated.map(m => m.id), status: 'rejetee', title: `Rejeter ${selectedTerminated.length} mission(s)` })}>
+              <XCircle size={13} /> Rejeter
+            </Button>
+            <Button size="sm" variant="outline" disabled={!selectedCancellable.length || bulkMut.loading}
+              onClick={() => setReasonTarget({ mode: 'bulk', ids: selectedCancellable.map(m => m.id), status: 'annulee', title: `Annuler ${selectedCancellable.length} mission(s)` })}>
+              <Ban size={13} /> Annuler ({selectedCancellable.length})
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={13} /> Désélectionner</Button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-2">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
       ) : list.length === 0 ? (
@@ -109,6 +191,11 @@ function Content() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1e2e25] bg-[#111916]">
+                {canDecide && (
+                  <th className="pl-4 py-3 w-8">
+                    <input type="checkbox" className="accent-[#0f9d70]" checked={allVisibleSelected} onChange={toggleAll} title="Tout sélectionner (lignes visibles)" />
+                  </th>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Dossier</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Client / Site</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Type</th>
@@ -125,7 +212,12 @@ function Content() {
               {list.map(m => {
                 const meta = statusMeta(m.status);
                 return (
-                  <tr key={m.id} className="hover:bg-[#172019] transition-colors cursor-pointer" onClick={() => router.push('/missions/' + m.id)}>
+                  <tr key={m.id} className={'hover:bg-[#172019] transition-colors cursor-pointer ' + (selected.has(m.id) ? 'bg-[#0f9d70]/5' : '')} onClick={() => router.push('/missions/' + m.id)}>
+                    {canDecide && (
+                      <td className="pl-4 py-3" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="accent-[#0f9d70]" checked={selected.has(m.id)} onChange={() => toggleOne(m.id)} />
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-mono text-xs text-[#0f9d70]">{m.sonatelDossierNumber ?? '—'}</td>
                     <td className="px-4 py-3 font-medium text-[#e8ede9] max-w-44 truncate">{m.clientSite}</td>
                     <td className="px-4 py-3"><Badge className={typeMeta(m.typeTache).cls}>{m.typeTache}</Badge></td>
@@ -142,17 +234,39 @@ function Content() {
                     </td>
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        {canDecide && m.status === 'terminee' && (
+                        {m.invoiceId && <span title="Mission facturée : statut verrouillé"><Badge className="bg-[#5b8def]/15 text-[#5b8def] border-[#5b8def]/30 text-[10px]">FACTURÉE</Badge></span>}
+                        {canDecide && m.status === 'terminee' && !m.invoiceId && (
                           <>
                             <Button size="sm" className="h-8 px-2 text-xs" disabled={decideMut.loading} onClick={() => decideMut.mutate({ id: m.id, status: 'validee' })}>
                               <CheckCircle2 size={13} /> Valider
                             </Button>
-                            <Button size="sm" variant="danger" className="h-8 px-2 text-xs" disabled={decideMut.loading} onClick={() => decideMut.mutate({ id: m.id, status: 'rejetee' })}>
+                            <Button size="sm" variant="danger" className="h-8 px-2 text-xs" disabled={decideMut.loading}
+                              onClick={() => setReasonTarget({ mode: 'single', ids: [m.id], status: 'rejetee', title: `Rejeter — ${m.clientSite}` })} title="Rejeter (motif obligatoire)">
                               <XCircle size={13} />
                             </Button>
                           </>
                         )}
-                        {canDecide && !['terminee', 'validee', 'rejetee'].includes(m.status) && (
+                        {canDecide && ['planifiee', 'en_cours', 'a_completer'].includes(m.status) && (
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#C0392B]" disabled={decideMut.loading}
+                            onClick={() => setReasonTarget({ mode: 'single', ids: [m.id], status: 'annulee', title: `Annuler — ${m.clientSite}` })} title="Annuler la mission (motif obligatoire)">
+                            <Ban size={13} />
+                          </Button>
+                        )}
+                        {canDecide && m.status === 'annulee' && (
+                          <Button size="sm" variant="outline" className="h-8 px-2 text-xs" disabled={decideMut.loading}
+                            title={m.cancelReason ? `Motif d'annulation : ${m.cancelReason}` : undefined}
+                            onClick={() => decideMut.mutate({ id: m.id, status: 'planifiee' })}>
+                            <RotateCcw size={13} /> Rouvrir
+                          </Button>
+                        )}
+                        {canDecide && m.status === 'rejetee' && (
+                          <Button size="sm" variant="outline" className="h-8 px-2 text-xs" disabled={decideMut.loading}
+                            title={m.rejectionReason ? `Motif : ${m.rejectionReason}` : undefined}
+                            onClick={() => decideMut.mutate({ id: m.id, status: 'a_completer' })}>
+                            <RotateCcw size={13} /> À compléter
+                          </Button>
+                        )}
+                        {canDecide && !['terminee', 'validee', 'rejetee', 'annulee'].includes(m.status) && (
                           <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-[#7a8f80] hover:text-[#D9822B]" onClick={() => setReassignTarget(m)} title="Réaffecter (équipe, binôme, véhicule, créneau)">
                             <UsersRound size={13} />
                           </Button>
@@ -160,7 +274,7 @@ function Content() {
                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#0f9d70]" onClick={() => setEditTarget(m)} title="Modifier métadonnées">
                           <Edit size={13} />
                         </Button>
-                        {canDelete && m.status !== 'validee' && (
+                        {canDelete && !['validee', 'terminee'].includes(m.status) && !m.invoiceId && (
                           <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#C0392B]" onClick={() => setDeleteId(m.id)} title="Supprimer">
                             <Trash2 size={13} />
                           </Button>
@@ -181,8 +295,51 @@ function Content() {
       <ReassignModal mission={reassignTarget} onClose={() => setReassignTarget(null)} onDone={() => { setReassignTarget(null); refetch(); }} />
       <CreateMissionModal open={showCreate} onClose={() => setShowCreate(false)} onDone={refetch} />
       <EditMissionDetailsModal mission={editTarget} onClose={() => setEditTarget(null)} onDone={() => { setEditTarget(null); refetch(); }} />
+      <Modal open={!!reasonTarget} onClose={closeReason} title={reasonTarget?.title ?? ''}>
+        <form className="space-y-3" onSubmit={submitReason}>
+          <Textarea label={reasonTarget?.status === 'annulee' ? "Motif d'annulation *" : 'Motif du rejet *'} rows={3} required minLength={5} value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder={reasonTarget?.status === 'annulee' ? 'Client injoignable, doublon, demande retirée par SONATEL…' : 'Photos manquantes, mesure dBm hors norme…'} />
+          <p className="text-xs text-[#7a8f80]">
+            {reasonTarget?.status === 'annulee'
+              ? 'La mission sort du planning et de la facturation ; elle pourra être rouverte (retour « planifiée »).'
+              : 'Le motif est conservé sur la mission ; elle pourra ensuite être remise « à compléter ».'}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="secondary" onClick={closeReason}>Fermer</Button>
+            <Button type="submit" variant="danger" disabled={decideMut.loading || bulkMut.loading || reason.trim().length < 5}>
+              {(decideMut.loading || bulkMut.loading) && <Loader2 size={14} className="animate-spin" />}
+              {reasonTarget?.status === 'annulee' ? 'Annuler la mission' : 'Rejeter'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+      <ConfirmDialog open={confirmBulkValidate} onClose={() => setConfirmBulkValidate(false)} title="Validation groupée"
+        message={`Valider ${selectedTerminated.length} mission(s) terminée(s) ? Seules celles dont le rapport terrain est clôturé seront validées ; les autres seront listées avec la raison du refus.`}
+        confirmText="Valider" onConfirm={() => bulkMut.mutate({ ids: selectedTerminated.map(m => m.id), status: 'validee' })} />
+      {bulkResult && (
+        <Modal open onClose={() => setBulkResult(null)} title="Résultat de l'action groupée">
+          <div className="space-y-3">
+            <p className="text-sm text-[#e8ede9]">
+              <span className="text-[#0f9d70] font-semibold">{bulkResult.ok}</span> mission(s) {statusMeta(bulkResult.status).label.toLowerCase()}(s)
+              {bulkResult.failed.length > 0 && <> — <span className="text-[#C0392B] font-semibold">{bulkResult.failed.length}</span> refusée(s)</>}
+            </p>
+            {bulkResult.failed.length > 0 && (
+              <div className="max-h-72 overflow-y-auto rounded-lg border border-[#1e2e25] divide-y divide-[#1e2e25]/50">
+                {bulkResult.failed.map(f => (
+                  <div key={f.id} className="px-3 py-2 text-xs">
+                    <p className="text-[#e8ede9]">{f.clientSite ?? f.id}</p>
+                    <p className="text-[#C0392B]">{f.error}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end"><Button onClick={() => setBulkResult(null)}>OK</Button></div>
+          </div>
+        </Modal>
+      )}
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} title="Supprimer la mission"
-        message="Les rapports terrain associés peuvent être perdus. Les missions validées ne sont pas supprimables."
+        message="Les rapports terrain associés peuvent être perdus. Les missions terminées, validées ou facturées ne sont pas supprimables (utilisez « Annuler »)."
         confirmText="Supprimer" danger onConfirm={() => deleteId && deleteMut.mutate(deleteId)} />
     </div>
   );
@@ -375,7 +532,7 @@ function ReassignModal({ mission, onClose, onDone }: { mission: any | null; onCl
     <Modal open={!!mission} onClose={onClose} title={`Réaffecter — ${mission.clientSite}`} size="lg">
       <form className="space-y-3" onSubmit={submit}>
         <p className="text-xs text-[#7a8f80]">
-          Règles appliquées : équipe active obligatoire, pas de double affectation d'une même équipe ni d'un même véhicule sur le même créneau jour.
+          Règles appliquées : équipe active obligatoire, capacité journalière de l'équipe (Paramètres → Missions), un véhicule ne peut pas servir à deux équipes le même jour.
         </p>
         <div className="grid grid-cols-3 gap-3">
           <Select label="Équipe" value={f.teamId} onChange={e => setF({ ...f, teamId: e.target.value, technicianIds: [] })}>

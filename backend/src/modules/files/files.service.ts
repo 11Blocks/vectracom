@@ -44,7 +44,7 @@ function extFromMime(mime: string, original: string): string {
 
 @Injectable()
 export class FilesService {
-  store(file: Express.Multer.File, category: UploadCategory = 'docs') {
+  store(file: Express.Multer.File, category: UploadCategory = 'docs', companyId: string | null = null) {
     if (!file?.buffer?.length) throw new BadRequestException('Fichier vide');
     if (file.size > MAX_BYTES) throw new BadRequestException('Fichier trop lourd (12 Mo max)');
     if (!ALLOWED_MIME.includes(file.mimetype)) {
@@ -54,13 +54,14 @@ export class FilesService {
       throw new BadRequestException(`Catégorie invalide : ${category}`);
     }
 
-    const dir = path.join(process.cwd(), 'uploads', category);
+    const owner = companyId ?? 'platform';
+    const dir = path.join(process.cwd(), 'uploads', category, owner);
     fs.mkdirSync(dir, { recursive: true });
     const hash = createHash('sha256').update(file.buffer).digest('hex').slice(0, 16);
     const ext = extFromMime(file.mimetype, file.originalname);
     const fileName = `${hash}-${randomUUID().slice(0, 8)}.${ext}`;
     fs.writeFileSync(path.join(dir, fileName), file.buffer);
-    const url = `/uploads/${category}/${fileName}`;
+    const url = `/uploads/${category}/${owner}/${fileName}`;
 
     return {
       url,

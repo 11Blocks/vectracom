@@ -4,7 +4,7 @@ import { endSupportSession } from './support-session';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100/api/v1';
 
-function getToken(): string | null {
+export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('vectracom_token');
 }

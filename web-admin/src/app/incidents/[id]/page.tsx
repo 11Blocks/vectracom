@@ -5,11 +5,17 @@ import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, ConfirmDialog, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { incidentsService, teamsService, techniciansService } from '@/services';
+import { incidentsService, teamsService, techniciansService, absoluteUploadUrl } from '@/services';
 import {
   ArrowLeft, AlertTriangle, Loader2, FileDown, Users, Wrench, CheckCircle2, Lock,
-  MapPin, Clock, MessageSquare, Radio, Zap, Wrench as WrenchIcon,
+  MapPin, Clock, MessageSquare, Radio, Zap, Wrench as WrenchIcon, Pencil, RotateCcw,
 } from 'lucide-react';
+
+const PBO_DEFAUTS = ['DESORGANISE', 'SANS_COUVERCLE', 'ENDOMAGE', 'CABLE_DESORDRE'];
+const PIO_TYPES = ['POTEAU_SIMPLE', 'POTEAU_MOISE', 'CABLE', 'ACCESSOIRE'];
+const PIO_ETATS = ['DEBOUT', 'INCLINE', 'A_TERRE', 'CASSE'];
+const CHAMBRE_TYPES = ['L2T', 'L3T', 'L5T', 'L6T'];
+const CHAMBRE_ETATS = ['ACCESSIBLE', 'BOUCHEE', 'ENDOMAGEE', 'INONDEE'];
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   signalement: { label: 'Signalement', cls: 'bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/30' },
@@ -41,6 +47,8 @@ function Content() {
   const [showAssign, setShowAssign] = useState(false);
   const [showResolve, setShowResolve] = useState(false);
   const [showClose, setShowClose] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showReopen, setShowReopen] = useState(false);
 
   const { data, loading, refetch } = useQuery(() => incidentsService.get(String(id)), [id]);
   const { data: teams } = useQuery(() => teamsService.list(), []);
@@ -73,6 +81,15 @@ function Content() {
     },
   );
 
+  const updateMut = useMutation((d: any) => incidentsService.update(String(id), d), {
+    onSuccess: () => { toast({ title: 'Incident mis à jour', variant: 'success' }); setShowEdit(false); refetch(); },
+    onError: (e: any) => toast({ title: 'Modification impossible', description: e.message, variant: 'error' }),
+  });
+  const reopenMut = useMutation((reason: string) => incidentsService.reopen(String(id), reason), {
+    onSuccess: () => { toast({ title: 'Incident rouvert', variant: 'success' }); setShowReopen(false); refetch(); },
+    onError: (e: any) => toast({ title: 'Réouverture impossible', description: e.message, variant: 'error' }),
+  });
+
   const closeMut = useMutation(() => incidentsService.close(String(id)), {
     onSuccess: () => { toast({ title: 'Incident clôturé', variant: 'success' }); setShowClose(false); refetch(); },
     onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
@@ -95,8 +112,14 @@ function Content() {
   const inc = data;
   const st = STATUS_META[inc.status] ?? { label: inc.status, cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]' };
   const sev = SEVERITY_META[inc.severity] ?? SEVERITY_META.INFORMATION;
-  const teamName = teamsList.find((t: any) => t.id === inc.teamId)?.name;
-  const techNames = (inc.technicianIds ?? []).map((tid: string) => techs.find((t: any) => t.id === tid)?.fullName).filter(Boolean);
+  const teamName = teamsList.find((t: any) => t.id === inc.assignedTeamId)?.name;
+  const techNames = (inc.assignedTechnicianIds ?? []).map((tid: string) => techs.find((t: any) => t.id === tid)?.fullName).filter(Boolean);
+  const photoUrls: string[] = (inc.photos ?? []).map((p: any) => (typeof p === 'string' ? p : p?.url)).filter(Boolean);
+  const equipment = inc.rubrique === 'PBO'
+    ? [inc.pboReference, inc.pboDefaut].filter(Boolean).join(' · ')
+    : inc.rubrique === 'PIO'
+      ? [inc.pioType, inc.pioEtat].filter(Boolean).join(' · ')
+      : [inc.chambreType, inc.chambreEtat].filter(Boolean).join(' · ');
   const closed = inc.status === 'cloture';
 
   return (
@@ -124,6 +147,12 @@ function Content() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={downloadReport}><FileDown size={15} /> Rapport PDF</Button>
+          {canResolve && !closed && (
+            <Button variant="outline" onClick={() => setShowEdit(true)}><Pencil size={15} /> Modifier</Button>
+          )}
+          {canDirection && ['corrige', 'cloture'].includes(inc.status) && (
+            <Button variant="outline" onClick={() => setShowReopen(true)}><RotateCcw size={15} /> Rouvrir</Button>
+          )}
           {isAdmin && !closed && (
             <Button variant="outline" onClick={() => setShowAssign(true)}><Users size={15} /> Assigner</Button>
           )}
@@ -148,11 +177,12 @@ function Content() {
           <h3 className="text-sm font-semibold text-[#e8ede9]">Détails de l'incident</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
             {[
-              ['Description', inc.description ?? '—'],
+              ['Description', inc.description ?? inc.annotationOriginale ?? '—'],
               ['Clients impactés', inc.clientsImpacted ?? 0],
               ['N° impactés (ND)', (inc.ndList ?? []).slice(0, 3).join(', ') || '—'],
-              ['Site / équipement', inc.siteId ?? inc.equipmentRef ?? '—'],
+              ['Équipement', equipment || '—'],
               ['Zone ops', inc.zone ?? '—'],
+              ['OLT / adresse', [inc.olt, inc.address].filter(Boolean).join(' · ') || '—'],
               [
                 'Coordonnées GPS',
                 inc.gpsLatitude != null && inc.gpsLongitude != null
@@ -176,13 +206,19 @@ function Content() {
               {inc.resolvedAt && <p className="text-xs text-[#7a8f80] mt-1.5">Résolu le {fmtDateTime(inc.resolvedAt)}</p>}
             </div>
           )}
-          {inc.photosUrls && inc.photosUrls.length > 0 && (
+          {inc.validationNotes && (
+            <div className="rounded-lg border border-[#1e2e25] bg-[#0b120e] p-3">
+              <p className="text-xs font-semibold text-[#7a8f80] mb-1">Notes de suivi</p>
+              <p className="text-sm text-[#e8ede9] whitespace-pre-line">{inc.validationNotes}</p>
+            </div>
+          )}
+          {photoUrls.length > 0 && (
             <div>
-              <p className="text-xs text-[#7a8f80] mb-2">Photos ({inc.photosUrls.length})</p>
+              <p className="text-xs text-[#7a8f80] mb-2">Photos ({photoUrls.length})</p>
               <div className="flex gap-2 flex-wrap">
-                {inc.photosUrls.map((u: string, i: number) => (
+                {photoUrls.map((u: string, i: number) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={u} alt={`photo ${i + 1}`} className="h-20 w-28 object-cover rounded-md border border-[#1e2e25]"
+                  <img key={i} src={absoluteUploadUrl(u)} alt={`photo ${i + 1}`} className="h-20 w-28 object-cover rounded-md border border-[#1e2e25]"
                     onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
                 ))}
               </div>
@@ -219,7 +255,7 @@ function Content() {
       {/* Modal assignation */}
       <Modal open={showAssign} onClose={() => setShowAssign(false)} title="Assigner l'incident">
         <AssignForm teams={teamsList} techs={techs} loading={assignMut.loading}
-          onSubmit={d => assignMut.mutate(d)} defaultTeamId={inc.teamId} defaultTechs={inc.technicianIds ?? []}
+          onSubmit={d => assignMut.mutate(d)} defaultTeamId={inc.assignedTeamId} defaultTechs={inc.assignedTechnicianIds ?? []}
           onCancel={() => setShowAssign(false)} />
       </Modal>
 
@@ -242,6 +278,30 @@ function Content() {
         </form>
       </Modal>
 
+      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Modifier l'incident" size="lg">
+        {showEdit && (
+          <EditIncidentForm inc={inc} loading={updateMut.loading}
+            onSubmit={d => updateMut.mutate(d)} onCancel={() => setShowEdit(false)} />
+        )}
+      </Modal>
+
+      <Modal open={showReopen} onClose={() => setShowReopen(false)} title="Rouvrir l'incident">
+        <form className="space-y-3" onSubmit={e => {
+          e.preventDefault();
+          const fd = new FormData(e.target as HTMLFormElement);
+          reopenMut.mutate(String(fd.get('reason') || '').trim());
+        }}>
+          <Textarea label="Motif de réouverture *" name="reason" required minLength={3} rows={3}
+            placeholder="Défaut constaté à nouveau, résolution incomplète…" />
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="secondary" onClick={() => setShowReopen(false)}>Annuler</Button>
+            <Button type="submit" disabled={reopenMut.loading}>
+              {reopenMut.loading && <Loader2 size={14} className="animate-spin" />} Rouvrir
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       <ConfirmDialog open={showClose} onClose={() => setShowClose(false)} title="Clôturer l'incident"
         message="Clôture définitive après vérification de la résolution." confirmText="Clôturer"
         onConfirm={() => closeMut.mutate(undefined as any)} />
@@ -257,6 +317,77 @@ function TimelineRow({ label, at }: { label: string; at?: string | null }) {
       </span>
       <span className={at ? 'text-[#e8ede9]' : 'text-[#7a8f80]/40'}>{at ? fmtDateTime(at) : '—'}</span>
     </div>
+  );
+}
+
+function EditIncidentForm({ inc, loading, onSubmit, onCancel }: {
+  inc: any; loading: boolean; onSubmit: (d: any) => void; onCancel: () => void;
+}) {
+  const [f, setF] = useState<Record<string, any>>({
+    zone: inc.zone ?? '', olt: inc.olt ?? '', address: inc.address ?? '',
+    description: inc.description ?? '', severity: inc.severity ?? 'MINEUR',
+    clientsImpacted: inc.clientsImpacted ?? 0, ndList: (inc.ndList ?? []).join(', '),
+    pboReference: inc.pboReference ?? '', pboDefaut: inc.pboDefaut ?? PBO_DEFAUTS[0],
+    pioType: inc.pioType ?? PIO_TYPES[0], pioEtat: inc.pioEtat ?? PIO_ETATS[0],
+    chambreType: inc.chambreType ?? CHAMBRE_TYPES[0], chambreEtat: inc.chambreEtat ?? CHAMBRE_ETATS[0],
+  });
+  const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.value });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: any = {
+      zone: f.zone.trim(), olt: f.olt, address: f.address, description: f.description,
+      severity: f.severity, clientsImpacted: Math.max(0, Number(f.clientsImpacted) || 0),
+      ndList: String(f.ndList).split(/[,;\s]+/).map((s: string) => s.trim()).filter(Boolean),
+    };
+    if (inc.rubrique === 'PBO') Object.assign(payload, { pboReference: f.pboReference, pboDefaut: f.pboDefaut });
+    else if (inc.rubrique === 'PIO') Object.assign(payload, { pioType: f.pioType, pioEtat: f.pioEtat });
+    else Object.assign(payload, { chambreType: f.chambreType, chambreEtat: f.chambreEtat });
+    onSubmit(payload);
+  };
+
+  return (
+    <form className="space-y-3" onSubmit={submit}>
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Zone *" value={f.zone} onChange={set('zone')} required minLength={2} />
+        <Select label="Sévérité" value={f.severity} onChange={set('severity')}>
+          {Object.entries(SEVERITY_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+        </Select>
+        <Input label="OLT" value={f.olt} onChange={set('olt')} />
+        <Input label="Adresse" value={f.address} onChange={set('address')} />
+        {inc.rubrique === 'PBO' && (<>
+          <Input label="Référence PBO" value={f.pboReference} onChange={set('pboReference')} />
+          <Select label="Défaut" value={f.pboDefaut} onChange={set('pboDefaut')}>
+            {PBO_DEFAUTS.map(d => <option key={d} value={d}>{d}</option>)}
+          </Select>
+        </>)}
+        {inc.rubrique === 'PIO' && (<>
+          <Select label="Type" value={f.pioType} onChange={set('pioType')}>
+            {PIO_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
+          </Select>
+          <Select label="État" value={f.pioEtat} onChange={set('pioEtat')}>
+            {PIO_ETATS.map(d => <option key={d} value={d}>{d}</option>)}
+          </Select>
+        </>)}
+        {inc.rubrique === 'CHAMBRE' && (<>
+          <Select label="Type" value={f.chambreType} onChange={set('chambreType')}>
+            {CHAMBRE_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
+          </Select>
+          <Select label="État" value={f.chambreEtat} onChange={set('chambreEtat')}>
+            {CHAMBRE_ETATS.map(d => <option key={d} value={d}>{d}</option>)}
+          </Select>
+        </>)}
+        <Input label="Clients impactés" type="number" min={0} value={f.clientsImpacted} onChange={set('clientsImpacted')} />
+        <Input label="ND impactés (séparés par des virgules)" value={f.ndList} onChange={set('ndList')} />
+      </div>
+      <Textarea label="Description" rows={3} value={f.description} onChange={set('description')} />
+      <div className="flex gap-2 justify-end">
+        <Button type="button" variant="secondary" onClick={onCancel}>Annuler</Button>
+        <Button type="submit" disabled={loading}>
+          {loading && <Loader2 size={14} className="animate-spin" />} Enregistrer
+        </Button>
+      </div>
+    </form>
   );
 }
 

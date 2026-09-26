@@ -57,4 +57,20 @@ export class StockMovement extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   note: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  cancelledAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  cancelReason: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  cancelledBy: string | null;
+
+  /** Variations appliquées par emplacement ({ warehouseId: delta }) — base de l'annulation. */
+  @Column({ type: 'jsonb', nullable: true })
+  deltas: Record<string, number> | null;
 }

@@ -60,6 +60,7 @@ export class VehiclesController {
   }
 
   @Post(':id/events')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE, UserRole.MAGASINIER)
   createEvent(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -70,6 +71,7 @@ export class VehiclesController {
   }
 
   @Put(':id/events/:eventId')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE, UserRole.MAGASINIER)
   updateEvent(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,

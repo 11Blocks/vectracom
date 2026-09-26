@@ -21,6 +21,13 @@ export class Expense extends BaseEntity {
   @Column({ type: 'text' })
   category!: ExpenseCategory;
 
+  /** Date de la dépense (reçu), distincte de la date de saisie. */
+  @Column({ type: 'date' })
+  expenseDate!: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string | null;
+
   @Column({ type: 'numeric', precision: 12, scale: 2 })
   amount!: string;
 

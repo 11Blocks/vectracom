@@ -4,7 +4,9 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
   Query,
@@ -13,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { IsBooleanString, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBooleanString, IsIn, IsNumberString, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StockService } from './stock.service';
@@ -22,7 +24,7 @@ import { FocusImportService } from './focus-import.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import { CreateItemSerialDto } from './dto/create-item-serial.dto';
-import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
+import { CancelStockMovementDto, CreateStockMovementDto, InventoryDto } from './dto/create-stock-movement.dto';
 import { WAREHOUSE_TYPES } from './entities/warehouse.entity';
 import { STOCK_CATEGORIES, STOCK_FAMILIES } from './entities/stock-item.entity';
 import { MOVEMENT_TYPES } from './entities/stock-movement.entity';
@@ -43,6 +45,8 @@ class ListMovementsQueryDto {
   @IsOptional() @IsUUID() stockItemId?: string;
   @IsOptional() @IsUUID() warehouseId?: string;
   @IsOptional() @IsUUID() missionId?: string;
+  @IsOptional() @IsBooleanString() includeCancelled?: string;
+  @IsOptional() @IsNumberString() limit?: string;
 }
 
 @Controller()
@@ -62,11 +66,12 @@ export class StockController {
   )
   importFocus(
     @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
     this.requireTenant(companyId);
     if (!file?.buffer?.length) throw new BadRequestException('Fichier Excel requis (champ file)');
-    return this.focusImport.import(companyId!, file.buffer);
+    return this.focusImport.import(companyId!, file.buffer, userId);
   }
 
   // ------------------- Entrepôts -------------------
@@ -185,14 +190,52 @@ export class StockController {
   @Get('stock-movements')
   movements(@CurrentUser('companyId') companyId: string | null, @Query() query: ListMovementsQueryDto) {
     this.requireTenant(companyId);
-    return this.movementService.list(companyId!, query);
+    return this.movementService.list(companyId!, {
+      type: query.type,
+      stockItemId: query.stockItemId,
+      warehouseId: query.warehouseId,
+      missionId: query.missionId,
+      includeCancelled: query.includeCancelled !== 'false',
+      limit: query.limit ? Number(query.limit) : undefined,
+    });
   }
 
   @Post('stock-movements')
   @Roles(UserRole.ADMIN, UserRole.MAGASINIER, UserRole.CHEF_EQUIPE)
-  createMovement(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateStockMovementDto) {
+  createMovement(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+    @Body() dto: CreateStockMovementDto,
+  ) {
     this.requireTenant(companyId);
-    return this.movementService.create(companyId!, dto);
+    return this.movementService.create(companyId!, dto, { id: userId, role });
+  }
+
+  @Post('stock-movements/inventory')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER)
+  inventory(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+    @Body() dto: InventoryDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.movementService.inventory(companyId!, dto, { id: userId, role });
+  }
+
+  @Post('stock-movements/:id/cancel')
+  @HttpCode(200)
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER)
+  cancelMovement(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelStockMovementDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.movementService.cancel(companyId!, id, dto.reason, { id: userId, role });
   }
 
   @Get('stock-serials/:id/traceability')

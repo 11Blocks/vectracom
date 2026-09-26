@@ -64,7 +64,30 @@ export class HrService {
     return this.findEmployee(companyId, employee.id);
   }
 
-  listEmployees(companyId: string, filters: { teamId?: string; status?: string }) {
+  /**
+   * « En congé » est dérivé des congés approuvés couvrant aujourd'hui : un congé
+   * futur n'affecte pas encore l'employé, un congé terminé le rend actif.
+   */
+  private async syncLeaveStatuses(companyId: string) {
+    await this.employeeRepository.query(
+      `UPDATE employees e
+          SET status = CASE WHEN EXISTS (
+                SELECT 1 FROM leave_requests l
+                 WHERE l.employee_id = e.id AND l.status = 'approuve'
+                   AND CURRENT_DATE BETWEEN l.start_date AND l.end_date)
+              THEN 'en_conge' ELSE 'actif' END
+        WHERE e.company_id = $1
+          AND e.status IS DISTINCT FROM CASE WHEN EXISTS (
+                SELECT 1 FROM leave_requests l
+                 WHERE l.employee_id = e.id AND l.status = 'approuve'
+                   AND CURRENT_DATE BETWEEN l.start_date AND l.end_date)
+              THEN 'en_conge' ELSE 'actif' END`,
+      [companyId],
+    );
+  }
+
+  async listEmployees(companyId: string, filters: { teamId?: string; status?: string }) {
+    await this.syncLeaveStatuses(companyId);
     const qb = this.employeeRepository
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.team', 'team')
@@ -120,7 +143,7 @@ export class HrService {
         employeeId: employee.id,
         startDate: dto.startDate.slice(0, 10),
         endDate: dto.endDate.slice(0, 10),
-        reason: dto.reason?.trim() ?? null,
+        reason: dto.reason?.trim() || null,
         status: 'en_attente',
       }),
     );
@@ -167,7 +190,7 @@ export class HrService {
         employeeId: employee.id,
         startDate: dto.startDate.slice(0, 10),
         endDate: dto.endDate.slice(0, 10),
-        reason: dto.reason?.trim() ?? null,
+        reason: dto.reason?.trim() || null,
         status: 'en_attente',
       }),
     );
@@ -192,11 +215,18 @@ export class HrService {
     }
     request.status = decision;
     await this.leaveRepository.save(request);
-
-    if (decision === 'approuve') {
-      await this.employeeRepository.update({ companyId, id: request.employeeId }, { status: 'en_conge' });
-    }
+    await this.syncLeaveStatuses(companyId);
     return this.leaveRepository.findOne({ where: { id }, relations: ['employee'] });
+  }
+
+  /** Annulation d'un congé approuvé (retour anticipé, erreur) — l'employé redevient actif. */
+  async cancelLeave(companyId: string, id: string) {
+    const request = await this.leaveRepository.findOne({ where: { companyId, id } });
+    if (!request) throw new NotFoundException('Demande de congé introuvable');
+    if (request.status === 'refuse') throw new BadRequestException('Demande déjà refusée');
+    await this.leaveRepository.remove(request);
+    await this.syncLeaveStatuses(companyId);
+    return { deleted: true };
   }
 
   // ------------------- Présence hebdomadaire -------------------
@@ -243,12 +273,6 @@ export class HrService {
         .getOne();
       if (byName) return byName;
     }
-
-    const leader = await this.technicianRepository.findOne({
-      where: { companyId, active: true, isTeamLeader: true },
-      order: { createdAt: 'ASC' },
-    });
-    if (leader) return leader;
 
     throw new BadRequestException(
       'Aucun technicien lié à ce compte — rattachez userId sur la fiche technicien',
@@ -339,6 +363,12 @@ export class HrService {
   }) {
     const candidate = await this.candidateRepository.findOne({ where: { companyId, id } });
     if (!candidate) throw new NotFoundException('Candidat introuvable');
+    if (dto.status === 'embauche' && candidate.status !== 'embauche') {
+      throw new BadRequestException('Utilisez l’action « Embaucher » pour créer la fiche employé');
+    }
+    if (dto.status && candidate.status === 'embauche' && dto.status !== 'embauche') {
+      throw new BadRequestException('Candidat déjà embauché — gérez désormais sa fiche employé');
+    }
     if (dto.status) candidate.status = dto.status as RecruitmentCandidate['status'];
     if (dto.notes !== undefined) candidate.notes = dto.notes;
     if (dto.interviewDate !== undefined) candidate.interviewDate = dto.interviewDate ? dto.interviewDate.slice(0, 10) : null;
@@ -347,6 +377,55 @@ export class HrService {
       candidate.documents = [...candidate.documents, { ...dto.document, addedAt: new Date().toISOString() }];
     }
     return this.candidateRepository.save(candidate);
+  }
+
+  /**
+   * Embauche : crée la fiche employé et, pour un poste terrain avec équipe,
+   * le technicien rattaché. Le candidat passe « embauche » (lien conservé).
+   */
+  async hireCandidate(companyId: string, id: string, dto: { teamId?: string; matricule?: string; createTechnician?: boolean }) {
+    const candidate = await this.candidateRepository.findOne({ where: { companyId, id } });
+    if (!candidate) throw new NotFoundException('Candidat introuvable');
+    if (candidate.status === 'embauche') throw new BadRequestException('Candidat déjà embauché');
+    if (candidate.status === 'rejete') throw new BadRequestException('Candidat rejeté — repassez-le « retenu » avant embauche');
+    if (dto.teamId) {
+      const rows = await this.employeeRepository.query('SELECT 1 FROM teams WHERE id = $1 AND company_id = $2', [dto.teamId, companyId]);
+      if (!rows.length) throw new BadRequestException('Équipe introuvable pour ce tenant');
+    }
+    const field = candidate.position === 'technicien' || candidate.position === 'chef_equipe';
+    if (dto.createTechnician && !field) throw new BadRequestException('Seuls les postes technicien / chef d’équipe créent un technicien');
+    if (dto.createTechnician && !dto.teamId) throw new BadRequestException('Équipe obligatoire pour créer le technicien');
+
+    return this.employeeRepository.manager.transaction(async (em) => {
+      const employee = await em.save(Employee, em.create(Employee, {
+        companyId,
+        fullName: candidate.fullName,
+        jobTitle: candidate.position,
+        teamId: dto.teamId ?? null,
+        matricule: dto.matricule?.trim() || null,
+        status: 'actif',
+        documents: [],
+      }));
+      let technicianId: string | null = null;
+      if (dto.createTechnician) {
+        const tech = await em.save(Technician, em.create(Technician, {
+          companyId,
+          teamId: dto.teamId!,
+          fullName: candidate.fullName,
+          phone: candidate.phone,
+          isTeamLeader: candidate.position === 'chef_equipe',
+          competences: [],
+          documents: [],
+        }));
+        technicianId = tech.id;
+      }
+      candidate.status = 'embauche';
+      candidate.hiredAt = new Date();
+      candidate.hiredEmployeeId = employee.id;
+      candidate.hiredTechnicianId = technicianId;
+      await em.save(RecruitmentCandidate, candidate);
+      return { candidate, employeeId: employee.id, technicianId };
+    });
   }
 
   async deleteCandidate(companyId: string, id: string) {
@@ -364,7 +443,9 @@ export class HrService {
     return this.dailyWorkerRepository.find({ where, order: { fullName: 'ASC' } });
   }
 
-  createDailyWorker(companyId: string, dto: { fullName: string; teamId: string; phone?: string; dailyRate?: number }) {
+  async createDailyWorker(companyId: string, dto: { fullName: string; teamId: string; phone?: string; dailyRate?: number }) {
+    const rows = await this.dailyWorkerRepository.query('SELECT 1 FROM teams WHERE id = $1 AND company_id = $2', [dto.teamId, companyId]);
+    if (!rows.length) throw new BadRequestException('Équipe introuvable pour ce tenant');
     return this.dailyWorkerRepository.save(
       this.dailyWorkerRepository.create({
         companyId,
@@ -376,9 +457,19 @@ export class HrService {
     );
   }
 
-  async updateDailyWorker(companyId: string, id: string, dto: { dailyRate?: number; active?: boolean; phone?: string }) {
+  async updateDailyWorker(
+    companyId: string,
+    id: string,
+    dto: { dailyRate?: number; active?: boolean; phone?: string; fullName?: string; teamId?: string },
+  ) {
     const worker = await this.dailyWorkerRepository.findOne({ where: { companyId, id } });
     if (!worker) throw new NotFoundException('Journalier introuvable');
+    if (dto.teamId && dto.teamId !== worker.teamId) {
+      const rows = await this.dailyWorkerRepository.query('SELECT 1 FROM teams WHERE id = $1 AND company_id = $2', [dto.teamId, companyId]);
+      if (!rows.length) throw new BadRequestException('Équipe introuvable pour ce tenant');
+      worker.teamId = dto.teamId;
+    }
+    if (dto.fullName !== undefined) worker.fullName = dto.fullName.trim();
     if (dto.dailyRate !== undefined) worker.dailyRate = String(dto.dailyRate);
     if (dto.active !== undefined) worker.active = dto.active;
     if (dto.phone !== undefined) worker.phone = dto.phone;
@@ -388,6 +479,10 @@ export class HrService {
   async deleteDailyWorker(companyId: string, id: string) {
     const worker = await this.dailyWorkerRepository.findOne({ where: { companyId, id } });
     if (!worker) throw new NotFoundException('Journalier introuvable');
+    const clocked = await this.dailyAttendanceRepository.count({ where: { companyId, dailyWorkerId: id } });
+    if (clocked > 0) {
+      throw new BadRequestException(`Journalier pointé ${clocked} jour(s) — désactivez-le plutôt que de le supprimer (historique de paie)`);
+    }
     await this.dailyWorkerRepository.remove(worker);
     return { deleted: true };
   }
@@ -396,6 +491,12 @@ export class HrService {
 
   /** Pointe plusieurs journaliers sur une mission pour un jour donné. */
   async clockIn(companyId: string, dto: { workerIds: string[]; day: string; missionId?: string; note?: string }) {
+    if (!/^\d{4}-\d{2}-\d{2}/.test(dto.day)) throw new BadRequestException('Jour attendu au format AAAA-MM-JJ');
+    if (dto.day.slice(0, 10) > new Date().toISOString().slice(0, 10)) throw new BadRequestException('Pointage dans le futur refusé');
+    if (dto.missionId) {
+      const rows = await this.dailyWorkerRepository.query('SELECT 1 FROM missions WHERE id = $1 AND company_id = $2', [dto.missionId, companyId]);
+      if (!rows.length) throw new BadRequestException('Mission introuvable pour ce tenant');
+    }
     let created = 0;
     for (const workerId of dto.workerIds) {
       const worker = await this.dailyWorkerRepository.findOne({ where: { companyId, id: workerId } });
@@ -416,7 +517,14 @@ export class HrService {
       );
       created++;
     }
-    return { created };
+    return { created, skipped: dto.workerIds.length - created };
+  }
+
+  /** Retire le pointage d'un journalier pour un jour (erreur de saisie). */
+  async removeClockIn(companyId: string, workerId: string, day: string) {
+    const res = await this.dailyAttendanceRepository.delete({ companyId, dailyWorkerId: workerId, day: day.slice(0, 10) });
+    if (!res.affected) throw new NotFoundException('Aucun pointage pour ce journalier ce jour-là');
+    return { deleted: true };
   }
 
   /** Synthèse du pointage d'une période : jours, salaire dû par journalier. */
@@ -440,6 +548,8 @@ export class HrService {
         fullName: w.fullName,
         teamId: w.teamId,
         days,
+        dates: own.map((r) => String(r.day).slice(0, 10)).sort(),
+        active: w.active,
         dailyRate: Number(w.dailyRate),
         salaryDue: Math.round(days * Number(w.dailyRate)),
       };

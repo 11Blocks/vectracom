@@ -1,15 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Invoice, InvoiceStatus } from './entities/invoice.entity';
-import { InvoiceLine } from './entities/invoice-line.entity';
+import { Invoice } from './entities/invoice.entity';
+import { INVOICE_CATEGORIES, InvoiceLine } from './entities/invoice-line.entity';
 import { InvoicesService } from './invoices.service';
+import { AuditService } from '../../common/audit/audit.service';
 
 /**
- * Lot P4 — Lignes spéciales de l'attachement réel ONECOMIT :
- * charge magasin, régule pénalités (moteur KPI), régularisation production,
- * TENUS (pantalons) et MACRON (primes vestimentaires).
- * Chaque ajout est tracé dans invoice.corrections (qui, quand, quoi).
+ * Lignes ajoutées à la main sur un brouillon : lignes spéciales de l'attachement
+ * (charge magasin, régule pénalités, TENUS, MACRON…) ou lignes libres.
+ * Chaque ajout / suppression est tracé dans invoice.corrections et le journal d'audit.
  */
 @Injectable()
 export class InvoiceExtrasService {
@@ -19,33 +19,31 @@ export class InvoiceExtrasService {
     @InjectRepository(InvoiceLine)
     private readonly lineRepository: Repository<InvoiceLine>,
     private readonly invoices: InvoicesService,
+    private readonly audit: AuditService,
   ) {}
 
-  /** Ajoute une ligne spéciale (catégorie, libellé, quantité, PU). */
   async addExtraLine(
     companyId: string,
     invoiceId: string,
-    dto: { label: string; quantity: number; unitPrice: number; category?: string; note?: string },
+    dto: { label: string; quantity: number; unitPrice: number; category?: string; unit?: string; note?: string },
     userId: string | null,
   ) {
     const invoice = await this.invoiceRepository.findOne({ where: { companyId, id: invoiceId } });
     if (!invoice) throw new NotFoundException('Facture introuvable');
-    if (invoice.status === 'finalisee') {
-      throw new BadRequestException('Facture finalisée — impossible de la modifier');
-    }
+    this.invoices.assertEditable(invoice);
     if (dto.quantity <= 0 || dto.unitPrice < 0) {
       throw new BadRequestException('Quantité > 0 et prix ≥ 0 requis');
     }
+    const category = dto.category && (INVOICE_CATEGORIES as readonly string[]).includes(dto.category) ? dto.category : 'AUTRE';
+    const last = await this.lineRepository.findOne({ where: { companyId, invoiceId }, order: { position: 'DESC' } });
 
-    await this.lineRepository.insert({
+    const line = this.invoices.buildLine(
       companyId,
-      invoiceId: invoice.id,
-      category: (dto.category ?? 'TS') as never,
-      itemType: dto.label,
-      quantity: dto.quantity,
-      unitPrice: String(dto.unitPrice),
-      total: String(dto.quantity * dto.unitPrice),
-    } as never);
+      invoice.id,
+      { itemType: dto.label, quantity: dto.quantity, unitPrice: dto.unitPrice, category, unit: dto.unit },
+      (last?.position ?? -1) + 1,
+    );
+    await this.lineRepository.insert(line as never);
 
     invoice.corrections = [
       ...(invoice.corrections ?? []),
@@ -58,12 +56,16 @@ export class InvoiceExtrasService {
           field: 'quantity',
           from: 0,
           to: dto.quantity,
-          reason: `Ajout ligne spéciale ${dto.quantity} × ${dto.unitPrice} F${dto.note ? ' — ' + dto.note : ''}`,
+          reason: `Ajout ligne ${dto.quantity} × ${dto.unitPrice} F${dto.note ? ' — ' + dto.note : ''}`,
         }],
       },
     ];
     await this.invoiceRepository.save(invoice);
     await this.invoices.recomputeTotals(companyId, invoice.id);
+    await this.audit.log({
+      companyId, actorId: userId, action: 'invoice.line_add', entityType: 'invoice', entityId: invoice.id,
+      payload: { label: dto.label, quantity: dto.quantity, unitPrice: dto.unitPrice },
+    });
     return this.invoices.findOne(companyId, invoice.id);
   }
 
@@ -79,9 +81,7 @@ export class InvoiceExtrasService {
   async removeLine(companyId: string, invoiceId: string, lineId: string, userId: string | null) {
     const invoice = await this.invoiceRepository.findOne({ where: { companyId, id: invoiceId } });
     if (!invoice) throw new NotFoundException('Facture introuvable');
-    if (invoice.status === 'finalisee') {
-      throw new BadRequestException('Facture finalisée — modification impossible');
-    }
+    this.invoices.assertEditable(invoice);
     const line = await this.lineRepository.findOne({ where: { companyId, invoiceId, id: lineId } });
     if (!line) throw new NotFoundException('Ligne introuvable');
     await this.lineRepository.remove(line);
@@ -91,7 +91,7 @@ export class InvoiceExtrasService {
         at: new Date().toISOString(),
         by: userId,
         changes: [{
-          lineId: line.id,
+          lineId,
           itemType: line.itemType,
           field: 'quantity',
           from: Number(line.quantity),
@@ -100,8 +100,13 @@ export class InvoiceExtrasService {
         }],
       },
     ];
+    invoice.status = 'en_correction';
     await this.invoiceRepository.save(invoice);
     await this.invoices.recomputeTotals(companyId, invoice.id);
+    await this.audit.log({
+      companyId, actorId: userId, action: 'invoice.line_remove', entityType: 'invoice', entityId: invoice.id,
+      payload: { label: line.itemType, total: Number(line.total) },
+    });
     return this.invoices.findOne(companyId, invoice.id);
   }
 }

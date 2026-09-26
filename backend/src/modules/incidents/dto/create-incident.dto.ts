@@ -14,6 +14,7 @@ import {
   CHAMBRE_ETATS,
   CHAMBRE_TYPES,
   INCIDENT_RUBRIQUES,
+  INCIDENT_SEVERITIES,
   INCIDENT_SOURCES,
   PBO_DEFAUTS,
   PIO_ETATS,
@@ -33,6 +34,9 @@ export class CreateIncidentDto {
   @IsOptional() @IsLatitude() gpsLatitude?: number;
   @IsOptional() @IsLongitude() gpsLongitude?: number;
   @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() description?: string;
+  /** Absente : déduite du nombre de clients impactés. */
+  @IsOptional() @IsIn(INCIDENT_SEVERITIES as unknown as string[]) severity?: string;
 
   @IsOptional() @IsString() pboReference?: string;
   @IsOptional() @IsIn(PBO_DEFAUTS as unknown as string[]) pboDefaut?: string;

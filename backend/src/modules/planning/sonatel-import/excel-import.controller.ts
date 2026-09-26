@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Roles, UserRole } from '../../../common/decorators/roles.decorator';
@@ -41,13 +41,24 @@ export class ExcelImportController {
 
   /** Confirme l'aperçu → écriture idempotente des missions. */
   @Post('confirm')
+  @Roles(UserRole.ADMIN)
   confirm(
     @Body() dto: ConfirmImportDto,
     @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
   ) {
     if (!companyId) {
       throw new BadRequestException('Import réservé aux comptes rattachés à un tenant');
     }
-    return this.excelImportService.confirm(dto.fileId, companyId, dto.selectedRows);
+    return this.excelImportService.confirm(dto.fileId, companyId, dto.selectedRows, userId);
+  }
+
+  /** Historique des imports confirmés (qui, quand, combien). */
+  @Get('history')
+  history(@CurrentUser('companyId') companyId: string | null) {
+    if (!companyId) {
+      throw new BadRequestException('Import réservé aux comptes rattachés à un tenant');
+    }
+    return this.excelImportService.history(companyId);
   }
 }

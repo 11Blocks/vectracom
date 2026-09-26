@@ -1,8 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { IsArray, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { HrService } from './hr.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
@@ -19,9 +21,24 @@ class LeaveMeDto {
   endDate!: string;
 
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' && !value.trim() ? undefined : value))
   @IsString()
   @MinLength(3)
   reason?: string;
+}
+
+class UpdateDailyWorkerDto {
+  @IsOptional() @IsString() @MinLength(3) fullName?: string;
+  @IsOptional() @IsUUID() teamId?: string;
+  @IsOptional() @IsNumber() @Min(0) dailyRate?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsString() phone?: string;
+}
+
+class HireCandidateDto {
+  @IsOptional() @IsUUID() teamId?: string;
+  @IsOptional() @IsString() matricule?: string;
+  @IsOptional() @IsBoolean() createTechnician?: boolean;
 }
 
 class ListEmployeesQueryDto {
@@ -104,7 +121,16 @@ class ClockInDto {
 @Controller()
 @Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
 export class HrController {
-  constructor(private readonly hrService: HrService) {}
+  constructor(
+    private readonly hrService: HrService,
+    private readonly audit: AuditService,
+  ) {}
+
+  private async trace<T>(companyId: string, actorId: string, action: string, entityType: string, entityId: string | null, payload: Record<string, unknown>, result: Promise<T>): Promise<T> {
+    const out = await result;
+    await this.audit.log({ companyId, actorId, action, entityType, entityId, payload });
+    return out;
+  }
 
   // ------------------- Journaliers & pointage chantier -------------------
 
@@ -114,7 +140,26 @@ export class HrController {
     return this.hrService.listDailyWorkers(companyId!, teamId);
   }
 
+  @Put('daily-workers/:id')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
+  updateDailyWorker(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDailyWorkerDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.hrService.updateDailyWorker(companyId!, id, dto);
+  }
+
+  @Delete('daily-workers/:id')
+  @Roles(UserRole.ADMIN)
+  deleteDailyWorker(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+    this.requireTenant(companyId);
+    return this.hrService.deleteDailyWorker(companyId!, id);
+  }
+
   @Post('daily-workers')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
   createDailyWorker(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: CreateDailyWorkerDto,
@@ -123,29 +168,30 @@ export class HrController {
     return this.hrService.createDailyWorker(companyId!, dto);
   }
 
-  @Put('daily-workers/:id')
-  updateDailyWorker(
-    @CurrentUser('companyId') companyId: string | null,
-    @Param('id') id: string,
-    @Body() dto: { dailyRate?: number; active?: boolean; phone?: string },
-  ) {
-    this.requireTenant(companyId);
-    return this.hrService.updateDailyWorker(companyId!, id, dto);
-  }
-
-  @Delete('daily-workers/:id')
-  deleteDailyWorker(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
-    this.requireTenant(companyId);
-    return this.hrService.deleteDailyWorker(companyId!, id);
-  }
-
   @Post('daily-attendance/clock-in')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
   clockIn(
     @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
     @Body() dto: ClockInDto,
   ) {
     this.requireTenant(companyId);
-    return this.hrService.clockIn(companyId!, dto);
+    return this.trace(companyId!, userId, 'hr.clock_in', 'daily_attendance', null,
+      { day: dto.day, workers: dto.workerIds.length, missionId: dto.missionId ?? null }, this.hrService.clockIn(companyId!, dto));
+  }
+
+  @Delete('daily-attendance/:workerId/:day')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
+  removeClockIn(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('workerId', ParseUUIDPipe) workerId: string,
+    @Param('day') day: string,
+  ) {
+    this.requireTenant(companyId);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new BadRequestException('Jour attendu au format AAAA-MM-JJ');
+    return this.trace(companyId!, userId, 'hr.clock_in_remove', 'daily_worker', workerId, { day },
+      this.hrService.removeClockIn(companyId!, workerId, day));
   }
 
   @Get('daily-attendance/timesheet')
@@ -169,6 +215,7 @@ export class HrController {
   }
 
   @Post('recruitment')
+  @Roles(UserRole.ADMIN)
   createCandidate(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: CreateCandidateDto,
@@ -178,6 +225,7 @@ export class HrController {
   }
 
   @Put('recruitment/:id')
+  @Roles(UserRole.ADMIN)
   updateCandidate(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -196,7 +244,22 @@ export class HrController {
     });
   }
 
+  @Post('recruitment/:id/hire')
+  @HttpCode(200)
+  @Roles(UserRole.ADMIN)
+  hireCandidate(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: HireCandidateDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.trace(companyId!, userId, 'hr.hire', 'recruitment_candidate', id, { ...dto },
+      this.hrService.hireCandidate(companyId!, id, dto));
+  }
+
   @Delete('recruitment/:id')
+  @Roles(UserRole.ADMIN)
   deleteCandidate(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
     this.requireTenant(companyId);
     return this.hrService.deleteCandidate(companyId!, id);
@@ -274,23 +337,31 @@ export class HrController {
 
   /** Demande en 2 clics — ouverte au chef d'équipe. */
   @Post('leave-requests')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
   createLeave(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateLeaveRequestDto) {
     this.requireTenant(companyId);
     return this.hrService.createLeaveRequest(companyId!, dto);
   }
 
   @Put('leave-requests/:id/approve')
-  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
-  approveLeave(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+  @Roles(UserRole.ADMIN)
+  approveLeave(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     this.requireTenant(companyId);
-    return this.hrService.decideLeave(companyId!, id, 'approuve');
+    return this.trace(companyId!, userId, 'hr.leave_approve', 'leave_request', id, {}, this.hrService.decideLeave(companyId!, id, 'approuve'));
   }
 
   @Put('leave-requests/:id/refuse')
-  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
-  refuseLeave(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+  @Roles(UserRole.ADMIN)
+  refuseLeave(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     this.requireTenant(companyId);
-    return this.hrService.decideLeave(companyId!, id, 'refuse');
+    return this.trace(companyId!, userId, 'hr.leave_refuse', 'leave_request', id, {}, this.hrService.decideLeave(companyId!, id, 'refuse'));
+  }
+
+  @Delete('leave-requests/:id')
+  @Roles(UserRole.ADMIN)
+  cancelLeave(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    this.requireTenant(companyId);
+    return this.trace(companyId!, userId, 'hr.leave_cancel', 'leave_request', id, {}, this.hrService.cancelLeave(companyId!, id));
   }
 
   // ------------------- Présence hebdomadaire -------------------
@@ -325,7 +396,7 @@ export class HrController {
   }
 
   @Put('attendance/:id/validate')
-  @Roles(UserRole.ADMIN, UserRole.DIRECTION)
+  @Roles(UserRole.ADMIN)
   validateAttendance(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,

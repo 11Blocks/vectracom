@@ -7,6 +7,7 @@ import { Button, Badge, Card, Skeleton, Input, useToast } from '@/components/ui'
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { settingsService } from '@/services';
 import { FileDropzone } from '@/components/FileDropzone';
+import { useSessionUser } from '@/components/admin/TenantPicker';
 import {
   Settings, Building2, Users, ClipboardList, Package, Truck, Target, Receipt,
   Bell, AlertTriangle, FileText, Link2, Shield, Wrench, Loader2, Download, Upload,
@@ -53,6 +54,7 @@ const FIELD_META: Record<string, Array<{ key: string; label: string; type?: 'tex
   missions: [
     { key: 'validationWorkflow', label: 'Workflow de validation' },
     { key: 'enabledTypes', label: 'Types de missions actifs (virgules)', type: 'list' },
+    { key: 'maxMissionsPerTeamPerDay', label: 'Capacité max. missions / équipe / jour (0 = illimité)', type: 'number' },
   ],
   stock: [
     { key: 'defaultAlertThreshold', label: "Seuil d'alerte par défaut", type: 'number' },
@@ -74,6 +76,7 @@ const FIELD_META: Record<string, Array<{ key: string; label: string; type?: 'tex
     { key: 'paymentTermsDays', label: 'Délai paiement (jours)', type: 'number' },
     { key: 'invoiceNumberFormat', label: 'Format n° facture' },
     { key: 'invoiceTemplate', label: 'Modèle facture' },
+    { key: 'billTerminatedMissions', label: 'Facturer aussi les missions terminées non validées', type: 'bool' },
   ],
   notifications: [
     { key: 'syncWithNotificationSettings', label: 'Sync avec module Notifications', type: 'bool' },
@@ -116,6 +119,8 @@ export default function Page() {
 
 function Content() {
   const { toast } = useToast();
+  const { user } = useSessionUser();
+  const canEdit = user?.role === 'admin';
   const [section, setSection] = useState<SectionKey>('general');
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [showJournal, setShowJournal] = useState(false);
@@ -221,6 +226,11 @@ function Content() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/parametres/entreprise">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs border-[#1e2e25]">
+              <Building2 size={14} /> Profil entreprise
+            </Button>
+          </Link>
           <Link href="/parametres/formulaires">
             <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs border-[#1e2e25]">
               <ClipboardList size={14} /> Formulaires
@@ -242,10 +252,12 @@ function Content() {
           <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs border-[#1e2e25]" onClick={onExport}>
             <Download size={14} /> Exporter
           </Button>
-          <label className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#1e2e25] bg-[#111916] text-xs text-[#e8ede9] cursor-pointer hover:border-[#0f9d70]/40">
-            <Upload size={14} /> Importer
-            <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => onImport(e.target.files?.[0])} />
-          </label>
+          {canEdit && (
+            <label className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#1e2e25] bg-[#111916] text-xs text-[#e8ede9] cursor-pointer hover:border-[#0f9d70]/40">
+              <Upload size={14} /> Importer
+              <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => onImport(e.target.files?.[0])} />
+            </label>
+          )}
         </div>
       </div>
 
@@ -350,6 +362,7 @@ function Content() {
                 ))}
               </div>
 
+              {canEdit ? (
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1e2e25]">
                 {section === 'advanced' ? (
                   <Button
@@ -375,6 +388,9 @@ function Content() {
                   Enregistrer
                 </Button>
               </div>
+              ) : (
+                <p className="pt-2 border-t border-[#1e2e25] text-xs text-[#7a8f80]">Lecture seule — seul l’administrateur du tenant peut modifier les paramètres.</p>
+              )}
             </Card>
           )}
         </div>

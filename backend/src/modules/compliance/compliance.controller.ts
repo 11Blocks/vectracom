@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ComplianceService } from './compliance.service';
@@ -19,6 +19,11 @@ import { COMPLIANCE_STATUSES } from './entities/compliance-record.entity';
 class ListRecordsQueryDto {
   @IsOptional() @IsString() teamId?: string;
   @IsOptional() @IsString() @IsIn(COMPLIANCE_STATUSES as unknown as string[]) status?: string;
+}
+
+class UpdateHabilitationDto {
+  @IsOptional() @IsArray() @IsString({ each: true }) habilitationDomains?: string[];
+  @IsOptional() @IsIn(['documentaire', 'physique', 'competences']) validationStep?: string;
 }
 
 @Controller('compliance')
@@ -148,10 +153,11 @@ export class ComplianceController {
   }
 
   @Put('records/:id/habilitation')
+  @Roles(UserRole.ADMIN)
   updateHabilitation(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
-    @Body() dto: { habilitationDomains?: string[]; validationStep?: string },
+    @Body() dto: UpdateHabilitationDto,
   ) {
     this.requireTenant(companyId);
     return this.complianceService.updateHabilitation(companyId!, id, dto);

@@ -6,19 +6,26 @@ import { Button, Badge, Modal, Card, Skeleton, StatCard, Input, Select, Textarea
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { accountingService, aiService, techniciansService, vehiclesService, cashBoxService } from '@/services';
 import { FileDropzone } from '@/components/FileDropzone';
+import { downloadCsv } from '@/lib/csv';
 import {
-  Plus, Search, Trash2, Loader2, Receipt, Camera, Sparkles, Check, X,
-  HardHat, Package, TruckIcon, MoreHorizontal, CalendarDays, Wand2, FileImage, Edit,
+  Plus, Search, Trash2, Loader2, Receipt, Camera, Sparkles, Check, X, Download, Ban, Wallet,
+  HardHat, Package, TruckIcon, MoreHorizontal, CalendarDays, Wand2, FileImage, Edit, Fuel, Wrench, Users, Coins,
 } from 'lucide-react';
 
 const CATEGORIES = [
   { value: 'main_oeuvre', label: 'Main d’œuvre', icon: HardHat, color: '#0f9d70' },
   { value: 'materiel', label: 'Matériel', icon: Package, color: '#5b8def' },
   { value: 'transport', label: 'Transport', icon: TruckIcon, color: '#f5a623' },
+  { value: 'carburant', label: 'Carburant', icon: Fuel, color: '#D9822B' },
+  { value: 'outils_rechange', label: 'Outils de rechange', icon: Wrench, color: '#8e7cc3' },
+  { value: 'depannage_vehicule', label: 'Dépannage véhicule', icon: TruckIcon, color: '#C0392B' },
+  { value: 'salaire_journalier', label: 'Salaire journalier', icon: Users, color: '#27ae60' },
+  { value: 'pret_equipe', label: 'Prêt équipe', icon: Coins, color: '#e67e22' },
   { value: 'divers', label: 'Divers', icon: MoreHorizontal, color: '#7a8f80' },
 ] as const;
+const MAIN_CATEGORIES = ['main_oeuvre', 'materiel', 'transport', 'carburant'];
 const CAT_LABEL: Record<string, string> = Object.fromEntries(CATEGORIES.map(c => [c.value, c.label]));
-
+function todayIso() { return new Date().toISOString().slice(0, 10); }
 function fmtFCFA(n: any) {
   const v = Number(n);
   return isNaN(v) ? '—' : v.toLocaleString('fr-FR') + ' FCFA';
@@ -43,8 +50,8 @@ function Content() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: expenses, loading, refetch } = useQuery(
-    () => accountingService.listExpenses(categoryFilter ? { category: categoryFilter } : undefined),
-    [categoryFilter],
+    () => accountingService.listExpenses({ month, ...(categoryFilter ? { category: categoryFilter } : {}) }),
+    [categoryFilter, month],
   );
   const { data: summary, refetch: refetchSummary } = useQuery(
     () => accountingService.summary(month), [month],
@@ -81,7 +88,14 @@ function Content() {
             <p className="text-xs text-[#7a8f80]">Dépenses opérationnelles — saisie terrain en 5 secondes</p>
           </div>
         </div>
-        <Button onClick={() => setShowCreate(true)}><Plus size={16} /> Nouvelle dépense</Button>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-[#7a8f80] flex items-center gap-1.5"><CalendarDays size={14} /> Mois</label>
+          <input
+            type="month" value={month} onChange={e => { if (e.target.value) setMonth(e.target.value); }}
+            className="h-9 px-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50"
+          />
+          <Button onClick={() => setShowCreate(true)}><Plus size={16} /> Nouvelle dépense</Button>
+        </div>
       </div>
 
       {/* Onglets P8 : Dépenses | Caisse | Matière */}
@@ -107,15 +121,11 @@ function Content() {
       <Card className="border-[#1e2e25] bg-[#111916] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 className="text-sm font-semibold text-[#e8ede9] flex items-center gap-2">
-            <CalendarDays size={16} className="text-[#0f9d70]" /> Synthèse mensuelle
+            <CalendarDays size={16} className="text-[#0f9d70]" /> Synthèse {month} (date des reçus)
           </h3>
-          <input
-            type="month" value={month} onChange={e => { setMonth(e.target.value); }}
-            className="h-9 px-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50"
-          />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          {CATEGORIES.map(cat => {
+          {CATEGORIES.filter(cat => MAIN_CATEGORIES.includes(cat.value) || lines.some((l: any) => l.category === cat.value && l.total > 0)).map(cat => {
             const line = lines.find((l: any) => l.category === cat.value);
             const catTotal = line?.total ?? 0;
             const pct = total > 0 ? Math.round((catTotal / total) * 100) : 0;
@@ -157,6 +167,11 @@ function Content() {
           <option value="">Toutes catégories</option>
           {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </Select>
+        <span className="text-xs text-[#7a8f80]">{list.length} dépense(s) · {fmtFCFA(list.reduce((s: number, x: any) => s + Number(x.amount), 0))}</span>
+        <Button variant="secondary" size="sm" className="ml-auto" disabled={list.length === 0} onClick={() => downloadCsv(`depenses-${month}.csv`, [
+          ['Date', 'Catégorie', 'Montant', 'Description', 'Technicien', 'Véhicule', 'Source'],
+          ...list.map((x: any) => [x.expenseDate ?? '', CAT_LABEL[x.category] ?? x.category, Number(x.amount), x.description ?? '', techName(x.technicianId) ?? '', vehicleName(x.vehicleId) ?? '', x.aiExtracted ? 'IA' : 'Manuelle']),
+        ])}><Download size={14} /> CSV</Button>
       </div>
 
       {/* Table des dépenses */}
@@ -165,7 +180,7 @@ function Content() {
       ) : list.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
           <Receipt size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
-          <p className="text-sm text-[#7a8f80]">Aucune dépense enregistrée</p>
+          <p className="text-sm text-[#7a8f80]">Aucune dépense sur {month}</p>
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-[0.625rem] border border-[#1e2e25]">
@@ -184,7 +199,7 @@ function Content() {
             <tbody className="divide-y divide-[#1e2e25]/50 bg-[#111916]">
               {list.map((exp: any) => (
                 <tr key={exp.id} className="hover:bg-[#172019] transition-colors">
-                  <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">{fmtDate(exp.createdAt)}</td>
+                  <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">{fmtDate(exp.expenseDate ?? exp.createdAt)}</td>
                   <td className="px-4 py-3">
                     <Badge className="bg-[#1a2420] text-[#e8ede9] border-[#1e2e25]">{CAT_LABEL[exp.category] ?? exp.category}</Badge>
                   </td>
@@ -254,7 +269,7 @@ function CreateExpenseModal({ open, onClose, techs, vehicles, onCreated }: {
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState<Record<string, any>>({
-    category: 'transport', amount: '', description: '', technicianId: '', vehicleId: '', receiptPhotoUrl: '',
+    category: 'transport', amount: '', expenseDate: todayIso(), description: '', technicianId: '', vehicleId: '', receiptPhotoUrl: '',
   });
   const [extraction, setExtraction] = useState<any | null>(null);
 
@@ -266,7 +281,7 @@ function CreateExpenseModal({ open, onClose, techs, vehicles, onCreated }: {
   const createMut = useMutation((data: any) => accountingService.createExpense(data), {
     onSuccess: () => {
       toast({ title: 'Dépense enregistrée', variant: 'success' });
-      setForm({ category: 'transport', amount: '', description: '', technicianId: '', vehicleId: '', receiptPhotoUrl: '' });
+      setForm({ category: 'transport', amount: '', expenseDate: todayIso(), description: '', technicianId: '', vehicleId: '', receiptPhotoUrl: '' });
       setExtraction(null);
       onClose(); onCreated();
     },
@@ -280,6 +295,8 @@ function CreateExpenseModal({ open, onClose, techs, vehicles, onCreated }: {
       amount: extraction.amount ?? prev.amount,
       category: extraction.category ?? prev.category,
       receiptPhotoUrl: extraction.photoUrl ?? prev.receiptPhotoUrl,
+      expenseDate: /^\d{4}-\d{2}-\d{2}/.test(String(extraction.date ?? '')) && String(extraction.date).slice(0, 10) <= todayIso()
+        ? String(extraction.date).slice(0, 10) : prev.expenseDate,
     }));
   };
 
@@ -288,6 +305,7 @@ function CreateExpenseModal({ open, onClose, techs, vehicles, onCreated }: {
     const payload: any = {
       category: form.category,
       amount: Number(form.amount),
+      expenseDate: form.expenseDate || undefined,
       description: form.description || undefined,
       receiptPhotoUrl: form.receiptPhotoUrl || undefined,
       technicianId: form.technicianId || undefined,
@@ -365,8 +383,10 @@ function CreateExpenseModal({ open, onClose, techs, vehicles, onCreated }: {
           <Select label="Catégorie *" value={String(form.category ?? '')} onChange={e => setForm({ ...form, category: e.target.value })} required>
             {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </Select>
-          <Input label="Montant (FCFA) *" type="number" min={0} step="1" value={String(form.amount ?? '')}
+          <Input label="Montant (FCFA) *" type="number" min={1} step="1" value={String(form.amount ?? '')}
             onChange={e => setForm({ ...form, amount: e.target.value })} required placeholder="15000" />
+          <Input label="Date du reçu *" type="date" max={todayIso()} value={String(form.expenseDate ?? '')}
+            onChange={e => setForm({ ...form, expenseDate: e.target.value })} required />
         </div>
         <Textarea label="Description" value={String(form.description ?? '')} onChange={e => setForm({ ...form, description: e.target.value })}
           placeholder="Carburant camionnette DK-1234-B…" rows={2} />
@@ -404,7 +424,8 @@ function EditExpenseModal({ expense, onClose, techs, vehicles, onDone }: {
     if (expense) {
       setForm({
         category: expense.category ?? 'divers',
-        amount: expense.amount ?? '',
+        amount: expense.amount != null ? String(Number(expense.amount)) : '',
+        expenseDate: expense.expenseDate ?? todayIso(),
         description: expense.description ?? '',
         technicianId: expense.technicianId ?? '',
         vehicleId: expense.vehicleId ?? '',
@@ -427,8 +448,9 @@ function EditExpenseModal({ expense, onClose, techs, vehicles, onDone }: {
         updateMut.mutate({
           category: form.category,
           amount: Number(form.amount),
-          description: form.description || undefined,
-          receiptPhotoUrl: form.receiptPhotoUrl || undefined,
+          expenseDate: form.expenseDate || undefined,
+          description: form.description || null,
+          receiptPhotoUrl: form.receiptPhotoUrl || null,
           technicianId: form.technicianId || null,
           vehicleId: form.vehicleId || null,
         });
@@ -445,8 +467,10 @@ function EditExpenseModal({ expense, onClose, techs, vehicles, onDone }: {
           <Select label="Catégorie *" value={String(form.category ?? '')} onChange={e => setForm({ ...form, category: e.target.value })} required>
             {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </Select>
-          <Input label="Montant (FCFA) *" type="number" min={0} step="1" value={String(form.amount ?? '')}
+          <Input label="Montant (FCFA) *" type="number" min={1} step="1" value={String(form.amount ?? '')}
             onChange={e => setForm({ ...form, amount: e.target.value })} required />
+          <Input label="Date du reçu *" type="date" max={todayIso()} value={String(form.expenseDate ?? '')}
+            onChange={e => setForm({ ...form, expenseDate: e.target.value })} required />
         </div>
         <Textarea label="Description" value={String(form.description ?? '')} onChange={e => setForm({ ...form, description: e.target.value })} rows={2} />
         <div className="grid grid-cols-2 gap-3">
@@ -484,130 +508,245 @@ const RUBRIQUES = [
   { value: 'divers', label: 'Divers' },
 ];
 
+const CASH_TYPE_META: Record<string, { label: string; cls: string; sign: 1 | -1 }> = {
+  appro: { label: 'Appro', cls: 'bg-[#0f9d70]/15 text-[#0f9d70] border-[#0f9d70]/30', sign: 1 },
+  remboursement_pret: { label: 'Remboursement', cls: 'bg-[#5b8def]/15 text-[#5b8def] border-[#5b8def]/30', sign: 1 },
+  depense: { label: 'Sortie', cls: 'bg-[#D9822B]/15 text-[#D9822B] border-[#D9822B]/30', sign: -1 },
+};
+
 function CashBoxTab({ month }: { month: string }) {
-  const { toast } = useToast();
-  const [showAdd, setShowAdd] = useState(false);
+  const [modal, setModal] = useState<'' | 'add'>('');
+  const [editEntry, setEditEntry] = useState<any | null>(null);
+  const [cancelEntry, setCancelEntry] = useState<any | null>(null);
+  const [repayEntry, setRepayEntry] = useState<any | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
+  const role = (() => { try { return JSON.parse(localStorage.getItem('vectracom_user') || 'null')?.role; } catch { return null; } })();
+  const canWrite = role === 'admin' || role === 'super_admin';
 
-  const { data: sum, loading } = useQuery(() => cashBoxService.summary(month), [month]);
-  const { data: entries, refetch } = useQuery(() => cashBoxService.list(month), [month]);
-  const entryList = Array.isArray(entries) ? entries : [];
-
-  const repayMut = useMutation(
-    ({ id, amount }: { id: string; amount: number }) => cashBoxService.repay(id, amount),
-    {
-      onSuccess: () => { toast({ title: 'Remboursement enregistré', variant: 'success' }); refetch(); },
-      onError: (e: Error) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
-    },
-  );
-
-  const rubriqueLabel = (r: string) => RUBRIQUES.find(x => x.value === r)?.label ?? r;
+  const { data: sum, loading, refetch: refetchSum } = useQuery(() => cashBoxService.summary(month), [month]);
+  const { data: entries, refetch: refetchEntries } = useQuery(() => cashBoxService.list(month), [month]);
+  const allEntries = Array.isArray(entries) ? entries : [];
+  const entryList = allEntries.filter((e: any) => showCancelled || !e.cancelledAt);
+  const refetch = () => { refetchSum(); refetchEntries(); };
+  const rubriqueLabel = (r: string) => r === 'approvisionnement' ? 'Approvisionnement' : (RUBRIQUES.find(x => x.value === r)?.label ?? r);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="grid grid-cols-3 gap-3 flex-1 mr-4">
-          <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25] text-center">
-            <p className="text-[10px] text-[#7a8f80] mb-1">Total caisse</p>
-            <p className="text-lg font-bold text-[#e8ede9] tabular-nums">{(sum?.grandTotal ?? 0).toLocaleString('fr-FR')} F</p>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+          <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25]">
+            <p className="text-[10px] text-[#7a8f80] mb-1">Solde d’ouverture</p>
+            <p className="text-lg font-bold text-[#e8ede9] tabular-nums">{fmtFCFA(sum?.openingBalance ?? 0)}</p>
           </div>
-          <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25] text-center">
-            <p className="text-[10px] text-[#7a8f80] mb-1">Saisi manuellement</p>
-            <p className="text-lg font-bold text-[#0f9d70] tabular-nums">{(sum?.manualTotal ?? 0).toLocaleString('fr-FR')} F</p>
+          <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25]">
+            <p className="text-[10px] text-[#7a8f80] mb-1">Entrées (appro + remboursements)</p>
+            <p className="text-lg font-bold text-[#0f9d70] tabular-nums">+{fmtFCFA(sum?.inflows?.total ?? 0)}</p>
           </div>
-          <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25] text-center">
-            <p className="text-[10px] text-[#7a8f80] mb-1">Auto (véhicules + salaires + dépenses)</p>
-            <p className="text-lg font-bold text-[#f5a623] tabular-nums">{(sum?.automaticTotal ?? 0).toLocaleString('fr-FR')} F</p>
+          <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25]">
+            <p className="text-[10px] text-[#7a8f80] mb-1">Sorties de caisse</p>
+            <p className="text-lg font-bold text-[#D9822B] tabular-nums">−{fmtFCFA(sum?.cashSpending ?? 0)}</p>
+          </div>
+          <div className={'p-3 rounded-lg border ' + ((sum?.closingBalance ?? 0) < 0 ? 'bg-[#C0392B]/[0.08] border-[#C0392B]/40' : 'bg-[#0f9d70]/[0.06] border-[#0f9d70]/30')}>
+            <p className="text-[10px] text-[#7a8f80] mb-1">Solde de clôture</p>
+            <p className={'text-lg font-bold tabular-nums ' + ((sum?.closingBalance ?? 0) < 0 ? 'text-[#C0392B]' : 'text-[#0f9d70]')}>{fmtFCFA(sum?.closingBalance ?? 0)}</p>
           </div>
         </div>
-        <Button onClick={() => setShowAdd(true)}><Plus size={15} /> Saisir</Button>
+        {canWrite && <Button onClick={() => setModal('add')}><Plus size={15} /> Saisir</Button>}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25]">
+          <p className="text-[10px] text-[#7a8f80] mb-1">Coût complet du mois (sorties caisse + sources automatiques)</p>
+          <p className="text-base font-bold text-[#e8ede9] tabular-nums">{fmtFCFA(sum?.totalCost ?? 0)}</p>
+          <p className="text-[10px] text-[#7a8f80]">
+            auto : carburant véhicules {fmtFCFA(sum?.sources?.fuelCost ?? 0)} · réparations {fmtFCFA(sum?.sources?.repairCost ?? 0)} · journaliers {fmtFCFA(sum?.sources?.journalierWages ?? 0)} · dépenses saisies {fmtFCFA(sum?.sources?.expensesTotal ?? 0)}
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25]">
+          <p className="text-[10px] text-[#7a8f80] mb-1">Prêts d’équipe en cours (tous mois)</p>
+          <p className="text-base font-bold text-[#e67e22] tabular-nums">{fmtFCFA(sum?.loans?.outstanding ?? 0)}</p>
+          <p className="text-[10px] text-[#7a8f80]">{sum?.loans?.count ?? 0} prêt(s) non soldé(s)</p>
+        </div>
       </div>
 
       {loading ? <Skeleton className="h-32" /> : (
-        <div className="rounded-lg border border-[#1e2e25] divide-y divide-[#1e2e25]/50 overflow-hidden">
+        <div className="rounded-lg border border-[#1e2e25] overflow-hidden">
+          <div className="grid grid-cols-4 px-4 py-2 text-[10px] uppercase tracking-wide text-[#7a8f80] bg-[#111916]">
+            <span>Rubrique</span><span className="text-right">Caisse</span><span className="text-right">Automatique</span><span className="text-right">Total</span>
+          </div>
           {(sum?.byRubrique ?? []).map((r: any) => (
-            <div key={r.rubrique} className="flex items-center justify-between px-4 py-2.5">
-              <span className="text-sm text-[#e8ede9]">{rubriqueLabel(r.rubrique)}</span>
-              <span className="text-sm font-semibold text-[#e8ede9] tabular-nums">{r.total.toLocaleString('fr-FR')} F</span>
+            <div key={r.rubrique} className="grid grid-cols-4 px-4 py-2 border-t border-[#1e2e25]/50 text-sm">
+              <span className="text-[#e8ede9]">{rubriqueLabel(r.rubrique)}</span>
+              <span className="text-right text-[#7a8f80] tabular-nums">{r.cash ? fmtFCFA(r.cash) : '—'}</span>
+              <span className="text-right text-[#7a8f80] tabular-nums">{r.automatic ? fmtFCFA(r.automatic) : '—'}</span>
+              <span className="text-right font-semibold text-[#e8ede9] tabular-nums">{fmtFCFA(r.total)}</span>
             </div>
           ))}
-          {(sum?.byRubrique ?? []).length === 0 && <p className="p-4 text-xs text-[#7a8f80]/70 text-center">Aucune opération sur la période.</p>}
+          {(sum?.byRubrique ?? []).length === 0 && <p className="p-4 text-xs text-[#7a8f80]/70 text-center border-t border-[#1e2e25]/50">Aucune dépense sur la période.</p>}
         </div>
       )}
 
-      {/* Lignes saisies (prêts avec remboursement) */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-[#e8ede9]">Mouvements de caisse ({entryList.length})</h3>
+        <label className="text-xs text-[#7a8f80] flex items-center gap-1.5">
+          <input type="checkbox" checked={showCancelled} onChange={e => setShowCancelled(e.target.checked)} /> Afficher les lignes annulées
+        </label>
+      </div>
       <div className="rounded-lg border border-[#1e2e25] divide-y divide-[#1e2e25]/50 overflow-hidden">
-        {entryList.length === 0 && <p className="p-4 text-xs text-[#7a8f80]/70 text-center">Aucune ligne saisie.</p>}
+        {entryList.length === 0 && <p className="p-4 text-xs text-[#7a8f80]/70 text-center">Aucun mouvement.</p>}
         {entryList.map((e: any) => {
+          const meta = CASH_TYPE_META[e.type] ?? { label: e.type, cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]', sign: -1 };
           const repaid = Number(e.repaidAmount);
           const total = Number(e.amount);
-          const isLoan = e.rubrique === 'pret_equipe';
+          const isLoan = e.rubrique === 'pret_equipe' && e.type === 'depense';
+          const cancelled = !!e.cancelledAt;
           return (
-            <div key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-              <div className="min-w-0">
-                <p className="text-sm text-[#e8ede9]">
-                  {rubriqueLabel(e.rubrique)} — {Number(e.amount).toLocaleString('fr-FR')} F
-                  <span className="text-[10px] text-[#7a8f80] ml-2">{e.type}{e.beneficiary ? ` · ${e.beneficiary}` : ''}</span>
-                </p>
-                {isLoan && repaid > 0 && (
-                  <p className="text-[10px] text-[#0f9d70]">remboursé {repaid.toLocaleString('fr-FR')} / {total.toLocaleString('fr-FR')} F ({Math.round((repaid / total) * 100)} %)</p>
+            <div key={e.id} className={'flex items-center justify-between gap-3 px-4 py-2.5 ' + (cancelled ? 'opacity-50' : '')}>
+              <div className="min-w-0 flex items-center gap-3">
+                <span className="text-xs text-[#7a8f80] w-20 shrink-0">{fmtDate(e.entryDate)}</span>
+                <Badge className={meta.cls}>{meta.label}</Badge>
+                <div className="min-w-0">
+                  <p className={'text-sm text-[#e8ede9] truncate ' + (cancelled ? 'line-through' : '')}>
+                    {rubriqueLabel(e.rubrique)}{e.beneficiary ? ` · ${e.beneficiary}` : ''}
+                  </p>
+                  {e.note && <p className="text-[10px] text-[#7a8f80] truncate">{e.note}</p>}
+                  {isLoan && !cancelled && (
+                    <p className="text-[10px] text-[#5b8def]">remboursé {fmtFCFA(repaid)} / {fmtFCFA(total)} ({total ? Math.round((repaid / total) * 100) : 0} %)</p>
+                  )}
+                  {cancelled && <p className="text-[10px] text-[#C0392B]">Annulée : {e.cancelReason}</p>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={'text-sm font-semibold tabular-nums ' + (meta.sign > 0 ? 'text-[#0f9d70]' : 'text-[#D9822B]')}>
+                  {meta.sign > 0 ? '+' : '−'}{fmtFCFA(total)}
+                </span>
+                {canWrite && !cancelled && (
+                  <>
+                    {isLoan && repaid < total && (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setRepayEntry(e)}><Wallet size={12} /> Rembourser</Button>
+                    )}
+                    {e.type !== 'remboursement_pret' && (
+                      <button className="p-1 text-[#7a8f80] hover:text-[#0f9d70]" title="Modifier" onClick={() => setEditEntry(e)}><Edit size={13} /></button>
+                    )}
+                    <button className="p-1 text-[#7a8f80] hover:text-[#C0392B]" title="Annuler la ligne" onClick={() => setCancelEntry(e)}><Ban size={13} /></button>
+                  </>
                 )}
               </div>
-              {isLoan && repaid < total && (
-                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => {
-                  const v = window.prompt('Montant du remboursement (FCFA) :', '20000');
-                  if (v) repayMut.mutate({ id: e.id, amount: Number(v) });
-                }}>
-                  Rembourser
-                </Button>
-              )}
             </div>
           );
         })}
       </div>
 
-      <AddCashEntryModal open={showAdd} month={month} onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); refetch(); }} />
+      {modal === 'add' && <CashEntryModal onClose={() => setModal('')} onDone={() => { setModal(''); refetch(); }} />}
+      {editEntry && <CashEntryModal entry={editEntry} onClose={() => setEditEntry(null)} onDone={() => { setEditEntry(null); refetch(); }} />}
+      {cancelEntry && <CancelCashModal entry={cancelEntry} onClose={() => setCancelEntry(null)} onDone={() => { setCancelEntry(null); refetch(); }} />}
+      {repayEntry && <RepayModal entry={repayEntry} onClose={() => setRepayEntry(null)} onDone={() => { setRepayEntry(null); refetch(); }} />}
     </div>
   );
 }
 
-function AddCashEntryModal({ open, month, onClose, onDone }: { open: boolean; month: string; onClose: () => void; onDone: () => void }) {
+function CashEntryModal({ entry, onClose, onDone }: { entry?: any; onClose: () => void; onDone: () => void }) {
   const { toast } = useToast();
-  const [f, setF] = useState({ type: 'appro', rubrique: 'carburant', amount: '', beneficiary: '', note: '' });
-
+  const [f, setF] = useState({
+    type: entry?.type ?? 'appro',
+    rubrique: entry?.rubrique && entry.rubrique !== 'approvisionnement' ? entry.rubrique : 'carburant',
+    amount: entry ? String(Number(entry.amount)) : '',
+    entryDate: entry?.entryDate ?? todayIso(),
+    beneficiary: entry?.beneficiary ?? '',
+    note: entry?.note ?? '',
+  });
   const mut = useMutation(
-    () => cashBoxService.create({
-      type: f.type,
-      rubrique: f.rubrique,
-      amount: Number(f.amount),
-      period: month,
-      beneficiary: f.beneficiary || undefined,
-      note: f.note || undefined,
-    }),
+    () => entry
+      ? cashBoxService.update(entry.id, {
+        ...(f.type === 'depense' ? { rubrique: f.rubrique } : {}),
+        amount: Number(f.amount), entryDate: f.entryDate,
+        beneficiary: f.beneficiary.trim() || null, note: f.note.trim() || null,
+      })
+      : cashBoxService.create({
+        type: f.type,
+        ...(f.type === 'depense' ? { rubrique: f.rubrique } : {}),
+        amount: Number(f.amount), entryDate: f.entryDate,
+        beneficiary: f.beneficiary.trim() || undefined, note: f.note.trim() || undefined,
+      }),
     {
-      onSuccess: () => { toast({ title: 'Ligne de caisse enregistrée', variant: 'success' }); onDone(); },
+      onSuccess: () => { toast({ title: entry ? 'Ligne modifiée' : 'Ligne de caisse enregistrée', variant: 'success' }); onDone(); },
       onError: (e: Error) => toast({ title: 'Enregistrement impossible', description: e.message, variant: 'error' }),
     },
   );
 
   return (
-    <Modal open={open} onClose={onClose} title={`Caisse — ${month}`}>
+    <Modal open onClose={onClose} title={entry ? 'Modifier la ligne de caisse' : 'Nouveau mouvement de caisse'}>
       <form className="space-y-3" onSubmit={e => { e.preventDefault(); mut.mutate(); }}>
         <div className="grid grid-cols-2 gap-3">
-          <Select label="Type *" value={f.type} onChange={e => setF({ ...f, type: e.target.value })}>
-            <option value="appro">Approvisionnement</option>
-            <option value="depense">Dépense</option>
-            <option value="remboursement_pret">Remboursement prêt</option>
+          <Select label="Type *" value={f.type} onChange={e => setF({ ...f, type: e.target.value })} disabled={!!entry}>
+            <option value="appro">Approvisionnement (entrée)</option>
+            <option value="depense">Dépense / prêt (sortie)</option>
           </Select>
-          <Select label="Rubrique *" value={f.rubrique} onChange={e => setF({ ...f, rubrique: e.target.value })}>
-            {RUBRIQUES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </Select>
+          {f.type === 'depense' ? (
+            <Select label="Rubrique *" value={f.rubrique} onChange={e => setF({ ...f, rubrique: e.target.value })}>
+              {RUBRIQUES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </Select>
+          ) : <div />}
+          <Input label="Montant (FCFA) *" type="number" min="1" value={f.amount} onChange={e => setF({ ...f, amount: e.target.value })} required placeholder="150000" />
+          <Input label="Date *" type="date" max={todayIso()} value={f.entryDate} onChange={e => setF({ ...f, entryDate: e.target.value })} required />
         </div>
-        <Input label="Montant (FCFA) *" type="number" min="1" value={f.amount} onChange={e => setF({ ...f, amount: e.target.value })} required placeholder="150000" />
-        <Input label="Bénéficiaire" value={f.beneficiary} onChange={e => setF({ ...f, beneficiary: e.target.value })} placeholder="Caisse Mbour / Équipe Alpha…" />
+        <Input label={f.rubrique === 'pret_equipe' && f.type === 'depense' ? 'Équipe / bénéficiaire du prêt *' : 'Bénéficiaire / origine'}
+          value={f.beneficiary} onChange={e => setF({ ...f, beneficiary: e.target.value })}
+          required={f.rubrique === 'pret_equipe' && f.type === 'depense'} placeholder="Caisse Mbour / Équipe Alpha…" />
         <Textarea label="Note" rows={2} value={f.note} onChange={e => setF({ ...f, note: e.target.value })} />
         <div className="flex gap-2 justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>Annuler</Button>
-          <Button type="submit" disabled={mut.loading || !f.amount}>{mut.loading && <Loader2 size={14} className="animate-spin" />} Enregistrer</Button>
+          <Button type="submit" disabled={mut.loading || !(Number(f.amount) > 0)}>{mut.loading && <Loader2 size={14} className="animate-spin" />} Enregistrer</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function CancelCashModal({ entry, onClose, onDone }: { entry: any; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [reason, setReason] = useState('');
+  const mut = useMutation(() => cashBoxService.cancel(entry.id, reason.trim()), {
+    onSuccess: () => { toast({ title: 'Ligne annulée', variant: 'success' }); onDone(); },
+    onError: (e: Error) => toast({ title: 'Annulation impossible', description: e.message, variant: 'error' }),
+  });
+  return (
+    <Modal open onClose={onClose} title="Annuler la ligne de caisse">
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); mut.mutate(); }}>
+        <p className="text-sm text-[#7a8f80]">
+          {fmtFCFA(entry.amount)} du {fmtDate(entry.entryDate)} — la ligne reste visible (barrée) mais sort des soldes.
+          {entry.type === 'remboursement_pret' ? ' Le montant est rendu au prêt correspondant.' : ''}
+        </p>
+        <Input label="Motif *" value={reason} onChange={e => setReason(e.target.value)} required minLength={3} placeholder="Saisie en double, erreur de montant…" />
+        <div className="flex gap-2 justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>Retour</Button>
+          <Button type="submit" variant="danger" disabled={mut.loading || reason.trim().length < 3}>{mut.loading && <Loader2 size={14} className="animate-spin" />} Annuler la ligne</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RepayModal({ entry, onClose, onDone }: { entry: any; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const remaining = Number(entry.amount) - Number(entry.repaidAmount);
+  const [amount, setAmount] = useState(String(remaining));
+  const [date, setDate] = useState(todayIso());
+  const mut = useMutation(() => cashBoxService.repay(entry.id, Number(amount), date), {
+    onSuccess: () => { toast({ title: 'Remboursement enregistré', variant: 'success' }); onDone(); },
+    onError: (e: Error) => toast({ title: 'Remboursement refusé', description: e.message, variant: 'error' }),
+  });
+  return (
+    <Modal open onClose={onClose} title={`Remboursement — ${entry.beneficiary ?? 'prêt équipe'}`}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); mut.mutate(); }}>
+        <p className="text-sm text-[#7a8f80]">Reste à rembourser : <b className="text-[#e67e22]">{fmtFCFA(remaining)}</b> sur {fmtFCFA(entry.amount)}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Montant (FCFA) *" type="number" min="1" max={remaining} value={amount} onChange={e => setAmount(e.target.value)} required />
+          <Input label="Date *" type="date" max={todayIso()} value={date} onChange={e => setDate(e.target.value)} required />
+        </div>
+        <div className="flex gap-2 justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>Annuler</Button>
+          <Button type="submit" disabled={mut.loading || !(Number(amount) > 0) || Number(amount) > remaining}>{mut.loading && <Loader2 size={14} className="animate-spin" />} Enregistrer</Button>
         </div>
       </form>
     </Modal>
@@ -630,7 +769,7 @@ function MaterialTab({ month }: { month: string }) {
           <p className="text-lg font-bold text-[#e8ede9]">{data?.movementsCount ?? 0}</p>
         </div>
         <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25] text-center col-span-2">
-          <p className="text-[10px] text-[#7a8f80] mb-1">Consommations valorisées (bordereau 2025)</p>
+          <p className="text-[10px] text-[#7a8f80] mb-1">Consommations valorisées (bordereau {data?.priceVersion ?? '—'})</p>
           <p className="text-lg font-bold text-[#D9822B] tabular-nums">{(data?.consommationsValue ?? 0).toLocaleString('fr-FR')} F</p>
         </div>
         <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25] text-center">

@@ -4,7 +4,9 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'node:path';
 import * as fs from 'node:fs';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { AppModule } from './app.module';
+import { uploadsGuard } from './common/uploads-guard';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -14,10 +16,15 @@ async function bootstrap() {
   // Derrière nginx (VPS) : IP réelle du client pour le journal d'audit.
   app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
-  // Fichiers uploadés (pré-audit IA Vision…) servis statiquement.
+  // Fichiers uploadés : servis statiquement derrière contrôle de session / tenant.
   const uploadsDir = join(process.cwd(), 'uploads');
   fs.mkdirSync(uploadsDir, { recursive: true });
-  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
+  // Double montage : le proxy du VPS ne route que /api/* vers le backend.
+  const guard = uploadsGuard(app.get(JwtService));
+  for (const prefix of ['/uploads', '/api/uploads']) {
+    app.use(prefix, guard);
+    app.useStaticAssets(uploadsDir, { prefix: prefix + '/' });
+  }
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

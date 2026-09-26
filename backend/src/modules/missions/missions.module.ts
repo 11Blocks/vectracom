@@ -15,11 +15,13 @@ import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Company } from '../auth/entities/company.entity';
 import { PdfGeneratorService } from '../../common/pdf/pdf-generator.service';
 import { GeolocationModule } from '../geolocation/geolocation.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Mission, MissionFieldReport, MissionTypeTemplate, Company, Team, Vehicle]),
     GeolocationModule,
+    SettingsModule,
   ],
   controllers: [MissionsController, MissionTemplatesController],
   providers: [

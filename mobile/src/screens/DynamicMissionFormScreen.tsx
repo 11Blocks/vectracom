@@ -18,16 +18,27 @@ import {
   getTemplateForMission,
   MissionTemplate,
   saveFieldReportData,
-  saveMissionMaterials,
   TemplateStep,
   TemplateStepField,
 } from '../services/missions';
+import { NetworkError, uploadFile } from '../services/api';
 import { enqueue, flushQueue } from '../offline/queue';
 
 type Answers = Record<string, any>;
 
 function isLocalUri(uri: string) {
-  return !!uri && !/^https?:\/\//i.test(uri);
+  return !!uri && /^(file|content|ph|assets-library):/i.test(uri);
+}
+
+async function uploadLocalFiles(data: Answers): Promise<Answers> {
+  const out: Answers = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (typeof val === 'string' && isLocalUri(val)) out[key] = await uploadFile(val);
+    else if (Array.isArray(val)) {
+      out[key] = await Promise.all(val.map((v) => (typeof v === 'string' && isLocalUri(v) ? uploadFile(v) : v)));
+    } else out[key] = val;
+  }
+  return out;
 }
 
 function validateStep(step: TemplateStep, answers: Answers): string | null {
@@ -111,31 +122,23 @@ export function DynamicMissionFormScreen() {
     return files;
   };
 
-  const persist = async (nextAnswers: Answers, markDone?: boolean) => {
+  /** Upload des photos/signatures locales puis envoi ; file hors-ligne uniquement si le réseau manque. */
+  const persist = async (nextAnswers: Answers, markDone?: boolean): Promise<boolean> => {
     setSaving(true);
     let wentOffline = false;
     try {
-      const payload = { data: { data: nextAnswers } };
       try {
-        await saveFieldReportData(missionId, nextAnswers);
-        if (Array.isArray(nextAnswers.materialsConsumed)) {
-          const materials = (nextAnswers.materialsConsumed as any[])
-            .filter((l) => l?.designation && Number(l.quantity) > 0)
-            .map((l, i) => ({
-              itemNumber: l.itemNumber ?? i + 1,
-              designation: String(l.designation),
-              quantity: Number(l.quantity),
-            }));
-          if (materials.length) await saveMissionMaterials(missionId, materials);
-        }
+        const uploaded = await uploadLocalFiles(nextAnswers);
+        setAnswers(uploaded);
+        await saveFieldReportData(missionId, uploaded);
         setPendingLocal(false);
-      } catch {
-        const localFiles = collectLocalFiles(nextAnswers);
+      } catch (e) {
+        if (!(e instanceof NetworkError)) throw e;
         await enqueue({
           method: 'POST',
           path: `/missions/${missionId}/field-report/step/data`,
-          body: payload,
-          localFiles,
+          body: { data: { data: nextAnswers } },
+          localFiles: collectLocalFiles(nextAnswers),
           missionId,
         });
         wentOffline = true;
@@ -149,8 +152,10 @@ export function DynamicMissionFormScreen() {
         );
         nav.goBack();
       }
+      return true;
     } catch (e: any) {
-      Alert.alert('Erreur', e?.message ?? 'Sauvegarde impossible');
+      Alert.alert('Enregistrement refusé', e?.message ?? 'Sauvegarde impossible');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -167,8 +172,7 @@ export function DynamicMissionFormScreen() {
       await persist(answers, true);
       return;
     }
-    await persist(answers, false);
-    setStepIndex((i) => i + 1);
+    if (await persist(answers, false)) setStepIndex((i) => i + 1);
   };
 
   if (loading) {

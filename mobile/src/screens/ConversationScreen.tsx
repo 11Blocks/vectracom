@@ -14,13 +14,15 @@ import { useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Button, Input, Screen, useToast } from '../components/ui';
 import { colors, spacing } from '../theme/colors';
-import { uploadFile, getApiUrl } from '../services/api';
+import { uploadFile, getApiUrl, getToken } from '../services/api';
 import { ChatMessage, listChatMessages, postChatMessage } from '../services/chat';
 
-function resolveMediaUrl(url: string) {
+/** /uploads est protégé par jeton et servi sous /api/uploads (seul /api/* est routé vers le backend en production). */
+function resolveMediaUrl(url: string, token: string | null) {
   if (/^https?:\/\//i.test(url)) return url;
-  const base = getApiUrl().replace(/\/api\/v1\/?$/, '');
-  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+  const path = url.startsWith('/') ? url : '/' + url;
+  if (!path.startsWith('/uploads/')) return getApiUrl().replace(/\/api\/v1\/?$/, '') + path;
+  return `${getApiUrl().replace(/\/v1\/?$/, '')}${path}${token ? '?token=' + encodeURIComponent(token) : ''}`;
 }
 
 export function ConversationScreen() {
@@ -29,6 +31,8 @@ export function ConversationScreen() {
   const roomId = route.params?.roomId as string;
   const title = route.params?.title as string | undefined;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [mediaToken, setMediaToken] = useState<string | null>(null);
+  useEffect(() => { void getToken().then(setMediaToken); }, []);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -129,7 +133,7 @@ export function ConversationScreen() {
                 ) : null}
                 {item.photoUrl ? (
                   <Image
-                    source={{ uri: resolveMediaUrl(item.photoUrl) }}
+                    source={{ uri: resolveMediaUrl(item.photoUrl, mediaToken) }}
                     style={styles.photo}
                     resizeMode="cover"
                   />

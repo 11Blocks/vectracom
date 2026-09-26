@@ -21,6 +21,9 @@ const CHECK_ITEMS = [
 const DOC_LABELS: Record<string, string> = {
   carte_grise: 'Carte grise', assurance: 'Assurance', visite_technique: 'Visite technique',
 };
+const STATUS_LABELS: Record<string, string> = {
+  disponible: 'Disponible', en_mission: 'En mission', en_reparation: 'En réparation',
+};
 
 function fmtDate(d?: string | null) {
   return d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -112,7 +115,7 @@ function Content() {
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <p className="font-bold text-[#e8ede9] font-mono">{v.immatriculation}</p>
-                  <p className="text-xs text-[#7a8f80]">{v.modele ?? '—'} · {v.status}</p>
+                  <p className="text-xs text-[#7a8f80]">{v.modele ?? '—'} · {STATUS_LABELS[v.status] ?? v.status}</p>
                 </div>
                 <span className="h-3 w-3 rounded-full mt-1 shrink-0" style={{ background: BADGE_COLOR[v.badges?.global ?? 'vert'] }} title={v.badges?.global} />
               </div>
@@ -234,7 +237,7 @@ function VehicleDetailModal({ vehicle, onClose }: { vehicle: any | null; onClose
             <div><p className="text-xs text-[#7a8f80]">Modèle</p><p className="text-[#e8ede9]">{vehicle.modele ?? '—'}</p></div>
             <div><p className="text-xs text-[#7a8f80]">Kilométrage</p><p className="text-[#e8ede9]">{fmtNum(vehicle.kilometrage)} km</p></div>
             <div><p className="text-xs text-[#7a8f80]">Équipe</p><p className="text-[#e8ede9]">{vehicle.team?.name ?? '—'}</p></div>
-            <div><p className="text-xs text-[#7a8f80]">Statut</p><p className="text-[#e8ede9]">{vehicle.status}</p></div>
+            <div><p className="text-xs text-[#7a8f80]">Statut</p><p className="text-[#e8ede9]">{STATUS_LABELS[vehicle.status] ?? vehicle.status}</p></div>
           </div>
           <div className="flex flex-wrap gap-2">
             <ExpiryPill label="Assurance" b={vehicle.badges?.insurance} />

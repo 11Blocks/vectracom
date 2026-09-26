@@ -116,7 +116,7 @@ function replaceLocalUris(node: unknown, uploaded: Map<string, string>): unknown
 }
 
 function isLocalUri(uri: string) {
-  return !!uri && !/^https?:\/\//i.test(uri);
+  return !!uri && /^(file|content|ph|assets-library):/i.test(uri);
 }
 
 async function schedulePhotoPurge(uris: string[]) {

@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsDateString,
   IsIn,
   IsNumber,
   IsOptional,
@@ -14,9 +15,14 @@ export class CreateExpenseDto {
   @IsIn(EXPENSE_CATEGORIES as unknown as string[])
   category!: string;
 
-  @IsNumber()
-  @Min(0)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
   amount!: number;
+
+  /** Date du reçu (défaut : aujourd'hui). */
+  @IsOptional()
+  @IsDateString()
+  expenseDate?: string;
 
   @IsOptional()
   @IsString()
@@ -43,4 +49,16 @@ export class CreateExpenseDto {
   @IsOptional()
   @IsBoolean()
   aiExtracted?: boolean;
+}
+
+export class UpdateExpenseDto {
+  @IsOptional() @IsIn(EXPENSE_CATEGORIES as unknown as string[]) category?: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) amount?: number;
+  @IsOptional() @IsDateString() expenseDate?: string;
+  @IsOptional() @IsString() receiptPhotoUrl?: string | null;
+  @IsOptional() @IsUUID() vehicleId?: string | null;
+  @IsOptional() @IsUUID() technicianId?: string | null;
+  @IsOptional() @IsUUID() missionId?: string | null;
+  @IsOptional() @IsString() description?: string | null;
+  @IsOptional() @IsBoolean() aiExtracted?: boolean;
 }

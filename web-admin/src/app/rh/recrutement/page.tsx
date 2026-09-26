@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, EmptyState, Modal, Input, Select, Textarea, ConfirmDialog, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { recruitmentService, absoluteUploadUrl } from '@/services';
+import { recruitmentService, teamsService, absoluteUploadUrl } from '@/services';
 import { FileDropzone } from '@/components/FileDropzone';
+import { useSessionUser } from '@/components/admin/TenantPicker';
 import {
   UserPlus, Loader2, Trash2, ArrowRight, Phone, Mail, FileText, CalendarDays,
-  Award, ChevronLeft, Briefcase,
+  Award, ChevronLeft, Briefcase, BadgeCheck,
 } from 'lucide-react';
 
 const STATUSES = [
@@ -18,7 +19,9 @@ const STATUSES = [
   { value: 'test_technique', label: 'Test technique', cls: 'bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/30' },
   { value: 'retenu', label: 'Retenu', cls: 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/30' },
   { value: 'rejete', label: 'Rejeté', cls: 'bg-[#C0392B]/20 text-[#C0392B] border-[#C0392B]/30' },
+  { value: 'embauche', label: 'Embauché', cls: 'bg-[#5b8def]/10 text-[#e8ede9] border-[#5b8def]/40' },
 ];
+const EDITABLE_STATUSES = STATUSES.filter(s => s.value !== 'embauche');
 const POSITIONS = [
   { value: 'technicien', label: 'Technicien' },
   { value: 'chauffeur', label: 'Chauffeur' },
@@ -54,9 +57,12 @@ export default function Page() {
 
 function Content() {
   const { toast } = useToast();
+  const { user } = useSessionUser();
+  const isAdmin = user?.role === 'admin';
   const [showCreate, setShowCreate] = useState(false);
   const [detail, setDetail] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [hire, setHire] = useState<any>(null);
 
   const { data, loading, refetch } = useQuery(() => recruitmentService.list(), []);
   const list = Array.isArray(data) ? data : [];
@@ -75,10 +81,10 @@ function Content() {
           </button>
           <h1 className="text-xl font-bold text-[#e8ede9] flex items-center gap-2"><UserPlus size={20} className="text-[#0f9d70]" /> Recrutement</h1>
           <p className="text-xs text-[#7a8f80] mt-0.5">
-            {list.length} candidat(s) · pipeline : nouveau → entretien → test technique → retenu/rejeté
+            {list.length} candidat(s) · pipeline : nouveau → entretien → test technique → retenu/rejeté → embauché
           </p>
         </div>
-        <Button onClick={() => setShowCreate(true)}><UserPlus size={15} /> Ajouter un candidat</Button>
+        {isAdmin && <Button onClick={() => setShowCreate(true)}><UserPlus size={15} /> Ajouter un candidat</Button>}
       </div>
 
       {loading ? (
@@ -88,10 +94,10 @@ function Content() {
           <EmptyState icon={<UserPlus size={40} className="text-[#7a8f80]/50" />}
             title="Aucun candidat"
             description="Ajoutez vos candidatures (techniciens, chauffeurs, magasiniers) et suivez leur progression."
-            action={<Button onClick={() => setShowCreate(true)}><UserPlus size={15} /> Premier candidat</Button>} />
+            action={isAdmin ? <Button onClick={() => setShowCreate(true)}><UserPlus size={15} /> Premier candidat</Button> : undefined} />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {STATUSES.map(st => {
             const column = list.filter(c => c.status === st.value);
             return (
@@ -126,7 +132,11 @@ function Content() {
       )}
 
       <CreateCandidateModal open={showCreate} onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); refetch(); }} />
-      <CandidateDetailModal candidate={detail} onClose={() => setDetail(null)} onDone={() => { setDetail(null); refetch(); }} onAskDelete={(id) => { setDetail(null); setDeleteId(id); }} />
+      {detail && (
+        <CandidateDetailModal key={detail.id} candidate={detail} readOnly={!isAdmin} onClose={() => setDetail(null)} onDone={() => { setDetail(null); refetch(); }}
+          onAskDelete={(id) => { setDetail(null); setDeleteId(id); }} onHire={(c) => { setDetail(null); setHire(c); }} />
+      )}
+      {hire && <HireModal candidate={hire} onClose={() => setHire(null)} onDone={() => { setHire(null); refetch(); }} />}
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} title="Supprimer le candidat"
         message="La candidature et ses pièces seront définitivement supprimées." confirmText="Supprimer" danger
         onConfirm={() => deleteId && deleteMut.mutate(deleteId)} />
@@ -183,9 +193,11 @@ function CreateCandidateModal({ open, onClose, onDone }: { open: boolean; onClos
 }
 
 /* ═════════════════ FICHE CANDIDAT ═════════════════ */
-function CandidateDetailModal({ candidate, onClose, onDone, onAskDelete }: {
-  candidate: any | null; onClose: () => void; onDone: () => void; onAskDelete: (id: string) => void;
+function CandidateDetailModal({ candidate, readOnly, onClose, onDone, onAskDelete, onHire }: {
+  candidate: any; readOnly?: boolean; onClose: () => void; onDone: () => void; onAskDelete: (id: string) => void; onHire: (c: any) => void;
 }) {
+  const hired = candidate.status === 'embauche';
+  const locked = hired || !!readOnly;
   const { toast } = useToast();
   const [f, setF] = useState({
     status: candidate?.status ?? 'nouveau',
@@ -203,8 +215,7 @@ function CandidateDetailModal({ candidate, onClose, onDone, onAskDelete }: {
     },
   );
 
-  if (!candidate) return null;
-  const next = NEXT_STATUS[f.status];
+  const next = locked ? undefined : NEXT_STATUS[f.status];
 
   const saveStage = () => updateMut.mutate({
     status: f.status,
@@ -238,7 +249,7 @@ function CandidateDetailModal({ candidate, onClose, onDone, onAskDelete }: {
               ))}
             </div>
           )}
-          <div className="space-y-2">
+          {!readOnly && <div className="space-y-2">
             <div className="grid grid-cols-[6rem_1fr] gap-2 items-end">
               <Select value={f.docType} onChange={e => setF({ ...f, docType: e.target.value })}>
                 {DOC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -253,16 +264,23 @@ function CandidateDetailModal({ candidate, onClose, onDone, onAskDelete }: {
                 <FileText size={13} /> Ajouter
               </Button>
             </div>
-          </div>
+          </div>}
         </div>
+
+        {hired && (
+          <div className="rounded-lg border border-[#5b8def]/30 bg-[#5b8def]/10 px-3 py-2 text-xs text-[#e8ede9] flex items-center gap-2">
+            <BadgeCheck size={14} className="text-[#5b8def]" />
+            Embauché le {fmtDate(candidate.hiredAt)} — fiche employé créée{candidate.hiredTechnicianId ? ' + technicien terrain' : ''}. Statut verrouillé.
+          </div>
+        )}
 
         {/* Étape du pipeline */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
-          <Select label="Statut" value={f.status} onChange={e => setF({ ...f, status: e.target.value })}>
-            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          <Select label="Statut" value={f.status} disabled={locked} onChange={e => setF({ ...f, status: e.target.value })}>
+            {(hired ? STATUSES : EDITABLE_STATUSES).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </Select>
-          <Input label="Entretien" type="date" value={f.interviewDate} onChange={e => setF({ ...f, interviewDate: e.target.value })} />
-          <Input label="Score test /100" type="number" min={0} max={100} value={f.testScore} onChange={e => setF({ ...f, testScore: e.target.value })} />
+          <Input label="Entretien" type="date" value={f.interviewDate} disabled={!!readOnly} onChange={e => setF({ ...f, interviewDate: e.target.value })} />
+          <Input label="Score test /100" type="number" min={0} max={100} value={f.testScore} disabled={!!readOnly} onChange={e => setF({ ...f, testScore: e.target.value })} />
           <div className="flex gap-2">
             {next && (
               <Button size="sm" onClick={() => { setF(p => ({ ...p, status: next })); updateMut.mutate({ status: next }); }}>
@@ -271,16 +289,68 @@ function CandidateDetailModal({ candidate, onClose, onDone, onAskDelete }: {
             )}
           </div>
         </div>
-        <Textarea label="Notes" rows={3} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Retours d'entretien, références…" />
+        <Textarea label="Notes" rows={3} value={f.notes} disabled={!!readOnly} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Retours d'entretien, références…" />
 
         <div className="flex items-center justify-between pt-1">
-          <Button variant="danger" size="sm" onClick={() => onAskDelete(candidate.id)}><Trash2 size={13} /> Supprimer</Button>
+          {readOnly
+            ? <p className="text-xs text-[#7a8f80]">Lecture seule — seul l’administrateur gère le recrutement.</p>
+            : <Button variant="danger" size="sm" onClick={() => onAskDelete(candidate.id)}><Trash2 size={13} /> Supprimer</Button>}
           <div className="flex gap-2">
+            {!readOnly && candidate.status === 'retenu' && (
+              <Button size="sm" variant="secondary" onClick={() => onHire(candidate)}><BadgeCheck size={13} /> Embaucher</Button>
+            )}
             <Button variant="secondary" size="sm" onClick={onClose}>Fermer</Button>
-            <Button size="sm" onClick={saveStage} loading={updateMut.loading}>Enregistrer</Button>
+            {!readOnly && <Button size="sm" onClick={saveStage} loading={updateMut.loading}>Enregistrer</Button>}
           </div>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+/* ═════════════════ EMBAUCHE ═════════════════ */
+function HireModal({ candidate, onClose, onDone }: { candidate: any; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const field = candidate.position === 'technicien' || candidate.position === 'chef_equipe';
+  const [f, setF] = useState({ teamId: '', matricule: '', createTechnician: field });
+  const { data: teamsData } = useQuery(() => teamsService.list(), []);
+  const teams: any[] = Array.isArray(teamsData) ? teamsData : (teamsData as any)?.data ?? [];
+
+  const mut = useMutation(
+    () => recruitmentService.hire(candidate.id, {
+      teamId: f.teamId || undefined,
+      matricule: f.matricule.trim() || undefined,
+      createTechnician: field ? f.createTechnician : false,
+    }),
+    {
+      onSuccess: () => { toast({ title: 'Embauche enregistrée', description: 'Fiche employé créée' + (f.createTechnician && field ? ' + technicien' : ''), variant: 'success' }); onDone(); },
+      onError: (e: Error) => toast({ title: 'Embauche impossible', description: e.message, variant: 'error' }),
+    },
+  );
+  const needTeam = field && f.createTechnician && !f.teamId;
+
+  return (
+    <Modal open onClose={onClose} title={'Embaucher ' + candidate.fullName}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); mut.mutate(); }}>
+        <p className="text-xs text-[#7a8f80]">
+          Crée la fiche employé ({posLabel(candidate.position)}) et passe la candidature en « Embauché ». Opération tracée, non réversible depuis le pipeline.
+        </p>
+        <Select label={field && f.createTechnician ? 'Équipe *' : 'Équipe'} value={f.teamId} onChange={e => setF({ ...f, teamId: e.target.value })}>
+          <option value="">— Aucune —</option>
+          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </Select>
+        <Input label="Matricule" value={f.matricule} onChange={e => setF({ ...f, matricule: e.target.value })} placeholder="EMP-0042" />
+        {field && (
+          <label className="flex items-center gap-2 text-sm text-[#e8ede9]">
+            <input type="checkbox" checked={f.createTechnician} onChange={e => setF({ ...f, createTechnician: e.target.checked })} />
+            Créer aussi le technicien terrain (affectable aux missions)
+          </label>
+        )}
+        <div className="flex gap-2 justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>Annuler</Button>
+          <Button type="submit" disabled={mut.loading || needTeam}>{mut.loading && <Loader2 size={14} className="animate-spin" />} Confirmer l’embauche</Button>
+        </div>
+      </form>
     </Modal>
   );
 }

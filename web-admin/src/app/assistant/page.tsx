@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button, Card, Badge, Skeleton, Modal, Input, Select, Textarea, ConfirmDialog, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { ragService } from '@/services';
+import { AiModeBadge } from '@/components/AiModeBadge';
 import { Sparkles, Send, Loader2, Plus, MessageSquare, Trash2, Bot, Library, FileText, BookOpen } from 'lucide-react';
 
 const SUGGESTIONS = [
@@ -45,7 +46,7 @@ function Content() {
         <div className="flex items-center gap-2">
           <span className="p-2 rounded-lg bg-[#f5a623]/15 text-[#f5a623]"><Bot size={20} /></span>
           <div>
-            <h1 className="text-xl font-bold text-[#e8ede9]">Assistant Direction — RAG</h1>
+            <h1 className="text-xl font-bold text-[#e8ede9] flex items-center gap-2">Assistant Direction — RAG <AiModeBadge /></h1>
             <p className="text-xs text-[#7a8f80]">Données du tenant + base documentaire · réponses en ambre avec sources citées</p>
           </div>
         </div>

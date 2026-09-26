@@ -16,9 +16,10 @@ import { Team } from '../teams/entities/team.entity';
 import { Partner } from '../partners/entities/partner.entity';
 import { Company } from '../auth/entities/company.entity';
 import { TechniciansModule } from '../technicians/technicians.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SonatelColumnMapping, Mission, Partner, DispositifEntry, Team, Company]), TechniciansModule],
+  imports: [TypeOrmModule.forFeature([SonatelColumnMapping, Mission, Partner, DispositifEntry, Team, Company]), TechniciansModule, SettingsModule],
   controllers: [PlanningController, DispositifController, ExcelImportController, ColumnMappingController],
   providers: [PlanningService, DispositifService, ExcelImportService, ColumnMappingService, PreviewStoreService],
   exports: [PlanningService],

@@ -70,6 +70,14 @@ export class AiController {
     return companyId;
   }
 
+  /** Moteurs réellement branchés : sans clé, les réponses viennent de règles déterministes. */
+  @Get('status')
+  status() {
+    const gemini = !!process.env.GEMINI_API_KEY;
+    const yolo = !!process.env.YOLO_API_URL;
+    return { gemini, yolo, mode: gemini || yolo ? 'ia' : 'regles' };
+  }
+
   // ----- Agent Terrain -----
 
   @Post('terrain/transcribe')

@@ -92,6 +92,7 @@ export class PerformanceDashboardController {
 
   /** Import de la feuille DAILY d'un Dashboard_Performance (historique). */
   @Post('import-daily')
+  @Roles(UserRole.ADMIN)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }))
   importDaily(
     @CurrentUser('companyId') companyId: string | null,

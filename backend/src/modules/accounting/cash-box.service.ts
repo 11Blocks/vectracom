@@ -1,19 +1,36 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CashBoxEntry } from './entities/cash-box-entry.entity';
+import { IsNull, Repository } from 'typeorm';
+import { CashBoxEntry, CashBoxType } from './entities/cash-box-entry.entity';
 import { Expense } from './entities/expense.entity';
 import { StockMovement } from '../stock/entities/stock-movement.entity';
 import { PriceItem } from '../stock/entities/price-item.entity';
 import { VehicleEvent } from '../vehicles/entities/vehicle-event.entity';
 import { DailyAttendance } from '../hr/entities/daily-attendance.entity';
 import { DailyWorker } from '../hr/entities/daily-worker.entity';
+import { AuditService } from '../../common/audit/audit.service';
+import { monthBounds } from './accounting.service';
+
+export interface CashEntryInput {
+  entryDate?: string;
+  period?: string;
+  type: string;
+  rubrique?: string;
+  amount: number;
+  beneficiary?: string | null;
+  teamId?: string | null;
+  vehicleId?: string | null;
+  note?: string | null;
+}
+
+const round = (n: number) => Math.round(n);
+const today = () => new Date().toISOString().slice(0, 10);
 
 /**
- * Lot P8 — Appro caisse par rubrique + comptabilité matière.
- * Agrège les sources réelles de la plateforme : événements véhicules
- * (carburant/réparations), dépenses IA, salaires journaliers pointés,
- * et valorise les mouvements de stock au bordereau.
+ * Lot P8 — Caisse : approvisionnements (entrées), dépenses caisse (sorties),
+ * prêts d'équipe et leurs remboursements. Le solde ne tient compte que des
+ * mouvements de caisse ; les sources automatiques (carburant véhicules,
+ * salaires journaliers, dépenses saisies) donnent le coût complet du mois.
  */
 @Injectable()
 export class CashBoxService {
@@ -32,56 +49,170 @@ export class CashBoxService {
     private readonly attendanceRepository: Repository<DailyAttendance>,
     @InjectRepository(DailyWorker)
     private readonly workerRepository: Repository<DailyWorker>,
+    private readonly audit: AuditService,
   ) {}
 
-  /** Saisie manuelle d'une ligne d'appro caisse. */
-  async create(companyId: string, dto: {
-    period?: string; type: string; rubrique: string; amount: number;
-    beneficiary?: string; teamId?: string; vehicleId?: string; note?: string;
-  }) {
-    const period = dto.period ?? new Date().toISOString().slice(0, 7);
-    if (dto.amount <= 0) throw new BadRequestException('Montant > 0 requis');
-    return this.entryRepository.save(
+  async create(companyId: string, dto: CashEntryInput, userId: string | null = null) {
+    if (dto.type === 'remboursement_pret') {
+      throw new BadRequestException('Un remboursement s’enregistre depuis la ligne du prêt (bouton « Rembourser »)');
+    }
+    const entryDate = this.resolveDate(dto);
+    const rubrique = this.resolveRubrique(dto.type, dto.rubrique);
+    if (!(dto.amount > 0)) throw new BadRequestException('Montant > 0 requis');
+    await this.assertLinks(companyId, dto);
+    const saved = await this.entryRepository.save(
       this.entryRepository.create({
         companyId,
-        period,
-        type: dto.type as CashBoxEntry['type'],
-        rubrique: dto.rubrique,
+        entryDate,
+        period: entryDate.slice(0, 7),
+        type: dto.type as CashBoxType,
+        rubrique,
         amount: String(dto.amount),
-        beneficiary: dto.beneficiary ?? null,
+        beneficiary: dto.beneficiary?.trim() || null,
         teamId: dto.teamId ?? null,
         vehicleId: dto.vehicleId ?? null,
-        note: dto.note ?? null,
+        note: dto.note?.trim() || null,
+        createdBy: userId,
       }),
     );
+    await this.audit.log({
+      companyId, actorId: userId, action: 'cash.create', entityType: 'cash_box_entry', entityId: saved.id,
+      payload: { type: saved.type, rubrique, amount: dto.amount, date: entryDate },
+    });
+    return saved;
   }
 
-  /** Enregistre un remboursement partiel de prêt d'équipe. */
-  async repay(companyId: string, id: string, amount: number) {
-    const entry = await this.entryRepository.findOne({ where: { companyId, id } });
-    if (!entry) throw new NotFoundException('Ligne introuvable');
-    if (entry.rubrique !== 'pret_equipe') throw new BadRequestException('Remboursement réservé aux prêts d\'équipe');
-    entry.repaidAmount = String(Number(entry.repaidAmount) + amount);
-    return this.entryRepository.save(entry);
+  async update(companyId: string, id: string, dto: Partial<CashEntryInput>, userId: string | null = null) {
+    const entry = await this.findActive(companyId, id);
+    if (entry.type === 'remboursement_pret') {
+      throw new BadRequestException('Remboursement non modifiable — annulez-le puis ressaisissez-le');
+    }
+    if (dto.type !== undefined && dto.type !== entry.type) {
+      throw new BadRequestException('Le type d’une ligne n’est pas modifiable — annulez-la puis ressaisissez-la');
+    }
+    await this.assertLinks(companyId, dto);
+    const before = { amount: Number(entry.amount), rubrique: entry.rubrique, date: entry.entryDate };
+    if (dto.entryDate !== undefined) {
+      entry.entryDate = this.resolveDate({ entryDate: dto.entryDate });
+      entry.period = entry.entryDate.slice(0, 7);
+    }
+    if (dto.rubrique !== undefined) entry.rubrique = this.resolveRubrique(entry.type, dto.rubrique);
+    if (dto.amount !== undefined) {
+      if (!(dto.amount > 0)) throw new BadRequestException('Montant > 0 requis');
+      if (entry.rubrique === 'pret_equipe' && dto.amount < Number(entry.repaidAmount)) {
+        throw new BadRequestException(`Montant inférieur au déjà remboursé (${Number(entry.repaidAmount)} FCFA)`);
+      }
+      entry.amount = String(dto.amount);
+    }
+    if (dto.beneficiary !== undefined) entry.beneficiary = dto.beneficiary?.trim() || null;
+    if (dto.teamId !== undefined) entry.teamId = dto.teamId ?? null;
+    if (dto.vehicleId !== undefined) entry.vehicleId = dto.vehicleId ?? null;
+    if (dto.note !== undefined) entry.note = dto.note?.trim() || null;
+    const saved = await this.entryRepository.save(entry);
+    await this.audit.log({
+      companyId, actorId: userId, action: 'cash.update', entityType: 'cash_box_entry', entityId: id,
+      payload: { before, after: { amount: Number(saved.amount), rubrique: saved.rubrique, date: saved.entryDate } },
+    });
+    return saved;
+  }
+
+  /** Annulation : la ligne reste visible (barrée) mais sort des totaux. */
+  async cancel(companyId: string, id: string, reason: string, userId: string | null = null) {
+    const entry = await this.findActive(companyId, id);
+    if (entry.rubrique === 'pret_equipe' && Number(entry.repaidAmount) > 0) {
+      throw new BadRequestException('Prêt partiellement remboursé — annulez d’abord ses remboursements');
+    }
+    await this.entryRepository.manager.transaction(async (em) => {
+      entry.cancelledAt = new Date();
+      entry.cancelReason = reason.trim();
+      await em.save(entry);
+      if (entry.type === 'remboursement_pret' && entry.loanEntryId) {
+        const loan = await em.findOne(CashBoxEntry, { where: { companyId, id: entry.loanEntryId } });
+        if (loan) {
+          loan.repaidAmount = String(Math.max(0, Number(loan.repaidAmount) - Number(entry.amount)));
+          await em.save(loan);
+        }
+      }
+    });
+    await this.audit.log({
+      companyId, actorId: userId, action: 'cash.cancel', entityType: 'cash_box_entry', entityId: id,
+      payload: { type: entry.type, rubrique: entry.rubrique, amount: Number(entry.amount), reason },
+    });
+    return entry;
+  }
+
+  /** Remboursement (partiel) d'un prêt d'équipe : crée une entrée de caisse liée au prêt. */
+  async repay(companyId: string, id: string, amount: number, entryDate?: string, userId: string | null = null) {
+    const loan = await this.findActive(companyId, id);
+    if (loan.rubrique !== 'pret_equipe') throw new BadRequestException('Remboursement réservé aux prêts d’équipe');
+    const remaining = Number(loan.amount) - Number(loan.repaidAmount);
+    if (!(amount > 0)) throw new BadRequestException('Montant > 0 requis');
+    if (amount > remaining + 0.001) throw new BadRequestException(`Le reste à rembourser est de ${round(remaining)} FCFA`);
+    const date = this.resolveDate({ entryDate });
+    const repayment = await this.entryRepository.manager.transaction(async (em) => {
+      loan.repaidAmount = String(Number(loan.repaidAmount) + amount);
+      await em.save(loan);
+      return em.save(
+        em.create(CashBoxEntry, {
+          companyId,
+          entryDate: date,
+          period: date.slice(0, 7),
+          type: 'remboursement_pret',
+          rubrique: 'pret_equipe',
+          amount: String(amount),
+          beneficiary: loan.beneficiary,
+          teamId: loan.teamId,
+          loanEntryId: loan.id,
+          note: `Remboursement du prêt du ${loan.entryDate}`,
+          createdBy: userId,
+        }),
+      );
+    });
+    await this.audit.log({
+      companyId, actorId: userId, action: 'cash.repay', entityType: 'cash_box_entry', entityId: loan.id,
+      payload: { amount, repaymentId: repayment.id },
+    });
+    return { loan, repayment };
   }
 
   list(companyId: string, period?: string) {
-    const where: Record<string, unknown> = { companyId };
-    if (period) where.period = period;
-    return this.entryRepository.find({ where, order: { createdAt: 'DESC' } });
+    const qb = this.entryRepository
+      .createQueryBuilder('e')
+      .where('e.company_id = :companyId', { companyId })
+      .orderBy('e.entryDate', 'DESC')
+      .addOrderBy('e.createdAt', 'DESC')
+      .take(2000);
+    if (period) {
+      const { from, to } = monthBounds(period);
+      qb.andWhere('e.entry_date BETWEEN :from AND :to', { from, to });
+    }
+    return qb.getMany();
   }
 
   /**
-   * Synthèse du mois : lignes saisies + agrégats automatiques des sources
-   * réelles (carburant/réparations véhicules, salaires journaliers pointés,
-   * dépenses validées) par rubrique.
+   * Synthèse du mois : solde de caisse (ouverture → clôture), entrées, sorties
+   * caisse par rubrique, prêts en cours, et coût complet incluant les sources
+   * automatiques (carburant/réparations véhicules, salaires journaliers, dépenses).
    */
   async summary(companyId: string, period: string) {
-    const from = `${period}-01`;
-    const [y, m] = period.split('-').map(Number);
-    const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const { from, to } = monthBounds(period);
 
-    const entries = await this.entryRepository.find({ where: { companyId, period } });
+    const [opening] = (await this.entryRepository.query(
+      `SELECT COALESCE(SUM(CASE WHEN type IN ('appro','remboursement_pret') THEN amount ELSE -amount END), 0) AS balance
+         FROM cash_box_entries
+        WHERE company_id = $1 AND cancelled_at IS NULL AND entry_date < $2`,
+      [companyId, from],
+    )) as Array<{ balance: string }>;
+    const openingBalance = Number(opening?.balance ?? 0);
+
+    const entries = await this.entryRepository
+      .createQueryBuilder('e')
+      .where('e.company_id = :cid AND e.cancelled_at IS NULL AND e.entry_date BETWEEN :from AND :to', { cid: companyId, from, to })
+      .getMany();
+    const sum = (type: CashBoxType) => entries.filter((e) => e.type === type).reduce((s, e) => s + Number(e.amount), 0);
+    const appro = sum('appro');
+    const repayments = sum('remboursement_pret');
+    const cashSpending = sum('depense');
 
     const vehicleEvents = await this.vehicleEventRepository
       .createQueryBuilder('e')
@@ -100,50 +231,67 @@ export class CashBoxService {
 
     const expenses = await this.expenseRepository
       .createQueryBuilder('x')
-      .where('x.company_id = :cid AND x.created_at BETWEEN :from AND :to', { cid: companyId, from, to: `${to}T23:59:59Z` })
+      .where('x.company_id = :cid AND x.expense_date BETWEEN :from AND :to', { cid: companyId, from, to })
       .getMany();
+    const expensesTotal = expenses.reduce((s, x) => s + Number(x.amount), 0);
 
-    const byRubrique = new Map<string, number>();
-    const add = (rubrique: string, amount: number) => byRubrique.set(rubrique, (byRubrique.get(rubrique) ?? 0) + amount);
-    for (const e of entries) add(e.rubrique, Number(e.amount));
-    add('carburant', fuelCost);
-    add('depannage_vehicule', repairCost);
-    add('salaire_journalier', wagesCost);
-    for (const x of expenses) add(x.category, Number(x.amount));
+    const byRubrique = new Map<string, { cash: number; automatic: number }>();
+    const add = (rubrique: string, kind: 'cash' | 'automatic', amount: number) => {
+      if (!amount) return;
+      const r = byRubrique.get(rubrique) ?? { cash: 0, automatic: 0 };
+      r[kind] += amount;
+      byRubrique.set(rubrique, r);
+    };
+    for (const e of entries) if (e.type === 'depense') add(e.rubrique, 'cash', Number(e.amount));
+    add('carburant', 'automatic', fuelCost);
+    add('depannage_vehicule', 'automatic', repairCost);
+    add('salaire_journalier', 'automatic', wagesCost);
+    for (const x of expenses) add(x.category, 'automatic', Number(x.amount));
 
-    const manualTotal = entries.reduce((s, e) => s + Number(e.amount), 0);
-    const autoTotal = fuelCost + repairCost + wagesCost + expenses.reduce((s, x) => s + Number(x.amount), 0);
+    const [loans] = (await this.entryRepository.query(
+      `SELECT COUNT(*) AS count, COALESCE(SUM(amount - repaid_amount), 0) AS outstanding
+         FROM cash_box_entries
+        WHERE company_id = $1 AND cancelled_at IS NULL AND rubrique = 'pret_equipe' AND type = 'depense'
+          AND amount > repaid_amount`,
+      [companyId],
+    )) as Array<{ count: string; outstanding: string }>;
 
+    const automaticTotal = fuelCost + repairCost + wagesCost + expensesTotal;
+    const inflows = appro + repayments;
     return {
       period,
+      openingBalance: round(openingBalance),
+      inflows: { appro: round(appro), repayments: round(repayments), total: round(inflows) },
+      cashSpending: round(cashSpending),
+      closingBalance: round(openingBalance + inflows - cashSpending),
       byRubrique: [...byRubrique.entries()]
-        .map(([rubrique, total]) => ({ rubrique, total: Math.round(total) }))
+        .map(([rubrique, v]) => ({ rubrique, cash: round(v.cash), automatic: round(v.automatic), total: round(v.cash + v.automatic) }))
         .sort((a, b) => b.total - a.total),
       sources: {
         manualEntries: entries.length,
-        fuelCost: Math.round(fuelCost),
-        repairCost: Math.round(repairCost),
-        journalierWages: Math.round(wagesCost),
+        fuelCost: round(fuelCost),
+        repairCost: round(repairCost),
+        journalierWages: round(wagesCost),
         expenses: expenses.length,
+        expensesTotal: round(expensesTotal),
       },
-      manualTotal: Math.round(manualTotal),
-      automaticTotal: Math.round(autoTotal),
-      grandTotal: Math.round(manualTotal + autoTotal),
+      loans: { count: Number(loans?.count ?? 0), outstanding: round(Number(loans?.outstanding ?? 0)) },
+      automaticTotal: round(automaticTotal),
+      totalCost: round(cashSpending + automaticTotal),
     };
   }
 
   /**
    * Comptabilité matière : valorisation des mouvements de stock du mois
-   * au bordereau 3STB 2025 (sorties valorisées par article).
+   * à la version active la plus récente du bordereau 3STB.
    */
   async material(companyId: string, period: string) {
-    const from = `${period}-01`;
-    const [y, m] = period.split('-').map(Number);
-    const to = `${new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)}T23:59:59Z`;
+    const { from, to } = monthBounds(period);
 
     const movements = await this.movementRepository
       .createQueryBuilder('mv')
-      .where('mv.company_id = :cid AND mv.created_at BETWEEN :from AND :to', { cid: companyId, from, to })
+      .where('mv.company_id = :cid AND mv.created_at BETWEEN :from AND :to', { cid: companyId, from, to: `${to}T23:59:59.999Z` })
+      .andWhere('mv.cancelled_at IS NULL')
       .getMany();
 
     const items = (await this.movementRepository.query(
@@ -152,7 +300,9 @@ export class CashBoxService {
     )) as Array<{ id: string; reference: string; designation: string }>;
     const itemById = new Map<string, { id: string; reference: string; designation: string }>(items.map((i) => [i.id, i]));
 
-    const prices = await this.priceRepository.find({ where: { companyId, version: '2025', isActive: true, priceGrid: 'BORDEREAU_3STB' } });
+    const activePrices = await this.priceRepository.find({ where: { companyId, isActive: true, priceGrid: 'BORDEREAU_3STB' } });
+    const priceVersion = activePrices.map((p) => p.version).sort().pop() ?? null;
+    const prices = activePrices.filter((p) => p.version === priceVersion);
     // Correspondance approximative désignation ↔ item bordereau (mot-clé principal).
     const priceOf = (designation: string): number => {
       const key = designation.toLowerCase();
@@ -184,13 +334,55 @@ export class CashBoxService {
 
     return {
       period,
+      priceVersion,
       movementsCount: movements.length,
-      byType: Object.entries(byType).map(([type, v]) => ({ type, count: v.count, value: Math.round(v.value) })),
+      byType: Object.entries(byType).map(([type, v]) => ({ type, count: v.count, value: round(v.value) })),
       consommations: [...byItem.values()]
-        .map((l) => ({ ...l, value: Math.round(l.value) }))
+        .map((l) => ({ ...l, value: round(l.value) }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 50),
-      consommationsValue: Math.round([...byItem.values()].reduce((s, l) => s + l.value, 0)),
+      consommationsValue: round([...byItem.values()].reduce((s, l) => s + l.value, 0)),
     };
+  }
+
+  private async findActive(companyId: string, id: string) {
+    const entry = await this.entryRepository.findOne({ where: { companyId, id, cancelledAt: IsNull() } });
+    if (!entry) throw new NotFoundException('Ligne de caisse introuvable ou annulée');
+    return entry;
+  }
+
+  private resolveDate(dto: { entryDate?: string; period?: string }): string {
+    if (dto.entryDate) {
+      const d = dto.entryDate.slice(0, 10);
+      if (d > today()) throw new BadRequestException('Date dans le futur');
+      return d;
+    }
+    if (dto.period) {
+      const { from, to } = monthBounds(dto.period);
+      const t = today();
+      return t >= from && t <= to ? t : from;
+    }
+    return today();
+  }
+
+  private resolveRubrique(type: string, rubrique?: string): string {
+    if (type === 'appro') {
+      if (rubrique === 'pret_equipe') throw new BadRequestException('Un prêt d’équipe est une sortie de caisse (type « dépense »)');
+      return rubrique?.trim() || 'approvisionnement';
+    }
+    if (!rubrique?.trim()) throw new BadRequestException('Rubrique requise pour une dépense');
+    return rubrique.trim();
+  }
+
+  private async assertLinks(companyId: string, dto: { teamId?: string | null; vehicleId?: string | null }) {
+    const checks: Array<[string, string | null | undefined, string]> = [
+      ['teams', dto.teamId, 'Équipe'],
+      ['vehicles', dto.vehicleId, 'Véhicule'],
+    ];
+    for (const [table, id, label] of checks) {
+      if (!id) continue;
+      const rows = await this.entryRepository.query(`SELECT 1 FROM ${table} WHERE id = $1 AND company_id = $2`, [id, companyId]);
+      if (!rows.length) throw new BadRequestException(`${label} inconnu pour ce tenant`);
+    }
   }
 }

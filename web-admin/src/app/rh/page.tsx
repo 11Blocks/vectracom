@@ -7,6 +7,7 @@ import { Button, Badge, Modal, Card, Skeleton, StatCard, Input, Select, Textarea
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { hrService, teamsService } from '@/services';
 import { api } from '@/lib/api';
+import { useSessionUser } from '@/components/admin/TenantPicker';
 import {
   Plus, Search, Edit, Trash2, Eye, Loader2, Users, CalendarDays, CheckCircle2, XCircle,
   Hourglass, CalendarOff, FileBadge, CalendarX2, UserCheck, UserMinus, ChevronLeft,
@@ -67,6 +68,8 @@ function Content() {
 //  ONGLET EMPLOYÉS — CRUD complet
 // ═══════════════════════════════════════════════════════════
 function EmployeesTab({ toast }: { toast: any }) {
+  const { user } = useSessionUser();
+  const isAdmin = user?.role === 'admin';
   const [showCreate, setShowCreate] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
@@ -147,9 +150,11 @@ function EmployeesTab({ toast }: { toast: any }) {
           <option value="actif">Actif</option>
           <option value="en_conge">En congé</option>
         </Select>
-        <Button onClick={() => { setForm({ fullName: '', jobTitle: '', matricule: '', status: 'actif', habilitationExpiration: '', teamId: '' }); setShowCreate(true); }}>
-          <Plus size={16} /> Nouvel employé
-        </Button>
+        {isAdmin && (
+          <Button onClick={() => { setForm({ fullName: '', jobTitle: '', matricule: '', status: 'actif', habilitationExpiration: '', teamId: '' }); setShowCreate(true); }}>
+            <Plus size={16} /> Nouvel employé
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -204,8 +209,12 @@ function EmployeesTab({ toast }: { toast: any }) {
                   <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#0f9d70]" onClick={() => setDetail(emp)} title="Détails"><Eye size={14} /></Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#0f9d70]" onClick={() => openEdit(emp)} title="Modifier"><Edit size={14} /></Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#C0392B]" onClick={() => setDeleteId(emp.id)} title="Supprimer"><Trash2 size={14} /></Button>
+                      {isAdmin && (
+                        <>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#0f9d70]" onClick={() => openEdit(emp)} title="Modifier"><Edit size={14} /></Button>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-[#7a8f80] hover:text-[#C0392B]" onClick={() => setDeleteId(emp.id)} title="Supprimer"><Trash2 size={14} /></Button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -294,6 +303,9 @@ function LeavesTab({ toast }: { toast: any }) {
   const [showCreate, setShowCreate] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [refuseId, setRefuseId] = useState<string | null>(null);
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const { user } = useSessionUser();
+  const isAdmin = user?.role === 'admin';
   const [form, setForm] = useState<Record<string, any>>({ employeeId: '', startDate: '', endDate: '', reason: '' });
 
   const { data, loading, refetch } = useQuery(
@@ -319,9 +331,15 @@ function LeavesTab({ toast }: { toast: any }) {
     onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
   });
 
+  const cancelMut = useMutation((id: string) => hrService.cancelLeave(id), {
+    onSuccess: () => { toast({ title: 'Congé annulé', variant: 'success' }); setCancelId(null); refetch(); },
+    onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
+  });
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMut.mutate(form);
+    const reason = String(form.reason ?? '').trim();
+    createMut.mutate({ employeeId: form.employeeId, startDate: form.startDate, endDate: form.endDate, ...(reason ? { reason } : {}) });
   };
 
   return (
@@ -341,9 +359,11 @@ function LeavesTab({ toast }: { toast: any }) {
           <option value="refuse">Refusés</option>
         </Select>
         <div className="flex-1" />
-        <Button onClick={() => { setForm({ employeeId: '', startDate: '', endDate: '', reason: '' }); setShowCreate(true); }}>
-          <Plus size={16} /> Nouvelle demande
-        </Button>
+        {(isAdmin || user?.role === 'chef_equipe') && (
+          <Button onClick={() => { setForm({ employeeId: '', startDate: '', endDate: '', reason: '' }); setShowCreate(true); }}>
+            <Plus size={16} /> Nouvelle demande
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -392,7 +412,7 @@ function LeavesTab({ toast }: { toast: any }) {
                     }>{LEAVE_LABELS[lv.status] ?? lv.status}</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {lv.status === 'en_attente' ? (
+                    {lv.status === 'en_attente' && isAdmin ? (
                       <div className="flex items-center justify-end gap-1">
                         <Button size="sm" onClick={() => approveMut.mutate(lv.id)} className="h-8 px-2.5 text-xs">
                           <CheckCircle2 size={14} /> Approuver
@@ -401,8 +421,12 @@ function LeavesTab({ toast }: { toast: any }) {
                           <XCircle size={14} /> Refuser
                         </Button>
                       </div>
+                    ) : lv.status === 'approuve' && isAdmin ? (
+                      <Button size="sm" variant="secondary" onClick={() => setCancelId(lv.id)} className="h-8 px-2.5 text-xs">
+                        <XCircle size={14} /> Annuler
+                      </Button>
                     ) : (
-                      <span className="text-xs text-[#7a8f80]/60">Décision rendue</span>
+                      <span className="text-xs text-[#7a8f80]/60">{lv.status === 'en_attente' ? 'En attente de l’admin' : 'Décision rendue'}</span>
                     )}
                   </td>
                 </tr>
@@ -438,6 +462,9 @@ function LeavesTab({ toast }: { toast: any }) {
       <ConfirmDialog open={!!refuseId} onClose={() => setRefuseId(null)} title="Refuser ce congé"
         message="L'employé sera notifié du refus. Cette décision reste modifiable via une nouvelle demande."
         confirmText="Refuser" danger onConfirm={() => refuseId && refuseMut.mutate(refuseId)} />
+      <ConfirmDialog open={!!cancelId} onClose={() => setCancelId(null)} title="Annuler ce congé"
+        message="La demande est supprimée et le statut « en congé » de l'employé est recalculé."
+        confirmText="Annuler le congé" danger onConfirm={() => cancelId && cancelMut.mutate(cancelId)} />
     </div>
   );
 }

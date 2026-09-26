@@ -115,31 +115,35 @@ export class NotificationsController {
     return this.notificationsService.unregisterPush(companyId!, userId, dto.token);
   }
 
-  /** Notification de test sur un canal au choix (y compris Telegram). */
+  /** Test d'un canal par l'admin ; destinataire par défaut = ses propres coordonnées. */
   @Post('test')
-  test(
+  @Roles(UserRole.ADMIN)
+  async test(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
     @Body() dto: TestNotificationDto,
   ) {
     this.requireTenant(companyId);
+    const me = await this.notificationsService.userContact(companyId!, userId);
+    const fallback = dto.channel === 'email' ? me?.email : dto.channel === 'whatsapp' ? me?.phone : null;
     return this.notificationsService.send({
       companyId: companyId!,
       type: 'test',
       channel: dto.channel as never,
       userId,
-      recipient: dto.recipient ?? null,
+      recipient: dto.recipient?.trim() || fallback || null,
       title: dto.title ?? 'Notification de test VECTRACOM',
       body: dto.body ?? `Test du canal ${dto.channel}`,
       data: dto.data,
     });
   }
 
-  /** Déclenchement manuel du cron quotidien (même code que 07h00). */
+  /** Déclenchement manuel des alertes quotidiennes, limité au tenant appelant. */
   @Post('cron/run-daily')
   @Roles(UserRole.ADMIN)
-  runDailyCron() {
-    return this.cron.runDaily();
+  runDailyCron(@CurrentUser('companyId') companyId: string | null) {
+    this.requireTenant(companyId);
+    return this.cron.runDaily(companyId!);
   }
 
   private requireTenant(companyId: string | null): void {

@@ -10,11 +10,12 @@ export const MISSION_STATUSES = [
   'validee',
   'rejetee',
   'a_completer',
+  'annulee',
 ] as const;
 export type MissionStatus = (typeof MISSION_STATUSES)[number];
 
 /** Statuts terminaux : une mission importée dans ces états n'est jamais écrasée. */
-export const TERMINAL_MISSION_STATUSES: MissionStatus[] = ['terminee', 'validee', 'rejetee'];
+export const TERMINAL_MISSION_STATUSES: MissionStatus[] = ['terminee', 'validee', 'rejetee', 'annulee'];
 
 /**
  * Mission terrain. Créée par l'import SONATEL (Phase 2) ou manuellement.
@@ -78,6 +79,8 @@ export class Mission extends BaseEntity {
     observations?: string | null;
     heureDebut?: string | null;
     heureFin?: string | null;
+    /** 'manual' : équipe choisie à la main — l'import ne l'écrase plus. */
+    teamAssignedBy?: 'import' | 'manual' | 'auto';
   } | null;
 
   // ----- Données SONATEL réelles (Planning global FTTH, lot P1) -----
@@ -147,6 +150,23 @@ export class Mission extends BaseEntity {
   /** Nombre d'interventions déjà réalisées sur ce ND (NBSI). */
   @Column({ type: 'integer', default: 0 })
   nbsi!: number;
+
+  /** Motif du dernier rejet back-office (effacé à la validation). */
+  @Column({ type: 'text', nullable: true })
+  rejectionReason: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  rejectedAt: Date | null;
+
+  /** Facture qui a valorisé la mission (une mission n'est facturée qu'une fois). */
+  @Column({ type: 'uuid', nullable: true })
+  invoiceId: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  cancelReason: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  cancelledAt: Date | null;
 
   /** Ligne en surcharge (feuille SURCH : zone sans capacité, non affectée). */
   @Column({ default: false })

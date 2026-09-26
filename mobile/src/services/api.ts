@@ -147,6 +147,9 @@ export async function pingHealth(): Promise<{ ok: boolean; detail: string }> {
   }
 }
 
+/** Échec de transport (pas de réponse du serveur) : seul cas où l'on met en file hors-ligne. */
+export class NetworkError extends Error {}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {
@@ -159,7 +162,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${getApiUrl()}${path}`, { ...options, headers });
   } catch {
-    throw new Error('Réseau indisponible — vérifiez le Wi‑Fi et l’API');
+    throw new NetworkError('Réseau indisponible — vérifiez le Wi‑Fi et l’API');
   }
 
   if (res.status === 204) return undefined as T;
@@ -222,7 +225,7 @@ export async function uploadFile(localUri: string, category = 'missions'): Promi
       body: form,
     });
   } catch {
-    throw new Error('Réseau indisponible — upload impossible');
+    throw new NetworkError('Réseau indisponible — upload impossible');
   }
   const body = await res.json().catch(() => ({}));
   if (res.status === 401) {

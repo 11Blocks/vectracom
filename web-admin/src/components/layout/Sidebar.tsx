@@ -59,9 +59,11 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/rh/presence', label: 'Présence', icon: icon(Clock) },
       { href: '/comptabilite', label: 'Comptabilité', icon: icon(Calculator) },
       { href: '/invoices', label: 'Facturation', icon: icon(Receipt) },
+      { href: '/invoices/bordereau', label: 'Bordereau de prix', icon: icon(ListChecks) },
       { href: '/parametres', label: 'Paramètres', icon: icon(Settings) },
       { href: '/parametres/utilisateurs', label: 'Utilisateurs', icon: icon(KeyRound), roles: ['admin'] },
       { href: '/parametres/formulaires', label: 'Formulaires', icon: icon(ListChecks) },
+      { href: '/historique', label: 'Historique', icon: icon(History) },
     ]},
     { group: 'Analyse', items: [
       { href: '/rapports', label: 'Rapports', icon: icon(FileText) },
@@ -86,31 +88,33 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/incidents', label: 'Incidents', icon: icon(AlertTriangle) },
       { href: '/geolocation', label: 'Géolocalisation', icon: icon(MapPin) },
       { href: '/compliance', label: 'Conformité', icon: icon(ShieldCheck) },
+      { href: '/rh', label: 'RH (lecture)', icon: icon(Users) },
       { href: '/rh/presence', label: 'Présence', icon: icon(Clock) },
+      { href: '/comptabilite', label: 'Comptabilité', icon: icon(Calculator) },
     ]},
     { group: 'Analyse', items: [
-      { href: '/rapports', label: 'Rapports', icon: icon(FileText) },
       { href: '/ia-vision', label: 'IA Vision', icon: icon(Eye) },
       { href: '/ia-vision/feedback', label: 'Feedback IA', icon: icon(MessageSquare) },
       { href: '/assistant', label: 'Assistant IA', icon: icon(Bot) },
-      { href: '/parametres', label: 'Paramètres', icon: icon(Settings) },
+      { href: '/parametres', label: 'Paramètres (lecture)', icon: icon(Settings) },
+      { href: '/historique', label: 'Historique', icon: icon(History) },
     ]},
   ],
   chef_equipe: [
     { group: 'Terrain', items: [
       { href: '/dashboard', label: 'Dashboard', icon: icon(LayoutDashboard) },
       { href: '/missions', label: 'Missions', icon: icon(ClipboardList) },
+      { href: '/incidents', label: 'Incidents', icon: icon(AlertTriangle) },
       { href: '/stock', label: 'Stock', icon: icon(Package) },
       { href: '/vehicles', label: 'Véhicule', icon: icon(Truck) },
+      { href: '/rh/journaliers', label: 'Journaliers', icon: icon(UserCog) },
     ]},
   ],
   magasinier: [
     { group: 'Stock', items: [
       { href: '/stock', label: 'Articles', icon: icon(Package) },
       { href: '/stock/warehouses', label: 'Emplacements', icon: icon(Warehouse) },
-    ]},
-    { group: 'Analyse', items: [
-      { href: '/ia-vision/feedback', label: 'Feedback IA', icon: icon(MessageSquare) },
+      { href: '/vehicles', label: 'Véhicules', icon: icon(Truck) },
     ]},
   ],
 };

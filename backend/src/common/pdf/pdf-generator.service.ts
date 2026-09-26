@@ -13,14 +13,15 @@ export class PdfGeneratorService {
   private readonly lineHeight = 16;
   private readonly maxY = this.pageHeight - this.margin;
 
-  generate(lines: Array<{ text: string; size?: number; bold?: boolean; spaceBefore?: number }>): Buffer {
+  /** mono : Courier, pour aligner des colonnes par remplissage d'espaces. */
+  generate(lines: Array<{ text: string; size?: number; bold?: boolean; mono?: boolean; spaceBefore?: number }>): Buffer {
     const pages: string[][] = [];
     let current: string[] = [];
     let y = this.margin;
 
     for (const line of lines) {
       const size = line.size ?? 10;
-      const font = line.bold ? '/F2' : '/F1';
+      const font = line.mono ? (line.bold ? '/F4' : '/F3') : line.bold ? '/F2' : '/F1';
       const leading = Math.max(this.lineHeight, size + 6);
       y += line.spaceBefore ?? 0;
       if (y + leading > this.maxY) {
@@ -46,14 +47,16 @@ export class PdfGeneratorService {
 
     pages.forEach((content, index) => {
       objects.push(
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${this.pageWidth} ${this.pageHeight}] /Resources << /Font << /F1 ${firstPageObj + pageCount * 2} 0 R /F2 ${firstPageObj + pageCount * 2 + 1} 0 R >> >> /Contents ${firstPageObj + index * 2 + 1} 0 R >>`,
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${this.pageWidth} ${this.pageHeight}] /Resources << /Font << /F1 ${firstPageObj + pageCount * 2} 0 R /F2 ${firstPageObj + pageCount * 2 + 1} 0 R /F3 ${firstPageObj + pageCount * 2 + 2} 0 R /F4 ${firstPageObj + pageCount * 2 + 3} 0 R >> >> /Contents ${firstPageObj + index * 2 + 1} 0 R >>`,
       );
       const stream = content.join('\n');
-      objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+      objects.push(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
     });
 
-    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>');
+    objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>');
 
     return this.assemble(objects);
   }
@@ -62,10 +65,10 @@ export class PdfGeneratorService {
     let pdf = '%PDF-1.4\n';
     const offsets: number[] = [];
     objects.forEach((obj, index) => {
-      offsets.push(Buffer.byteLength(pdf));
+      offsets.push(Buffer.byteLength(pdf, 'latin1'));
       pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
     });
-    const xrefStart = Buffer.byteLength(pdf);
+    const xrefStart = Buffer.byteLength(pdf, 'latin1');
     pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
     for (const offset of offsets) {
       pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
@@ -75,7 +78,17 @@ export class PdfGeneratorService {
   }
 
   private escape(text: string): string {
-    // WinAnsi approximatif : les accents Latin-1 passent en une octet.
-    return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+    // WinAnsi approximatif : les accents Latin-1 passent en un octet, le reste est translittéré.
+    return text
+      .replace(/[\u00A0\u202F\u2009]/g, ' ')
+      .replace(/[\u2013\u2014]/g, '-')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D\u00AB\u00BB]/g, '"')
+      .replace(/\u2192/g, '->')
+      .replace(/\u2026/g, '...')
+      .replace(/[^\x00-\xFF]/g, '?')
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)');
   }
 }

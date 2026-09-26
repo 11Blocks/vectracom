@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { InvoicesController } from './invoices.controller';
+import { ClientsController, InvoicesController } from './invoices.controller';
+import { InvoicePayment } from './entities/invoice-payment.entity';
+import { Client } from './entities/client.entity';
 import { InvoiceExtrasController } from './invoice-extras.controller';
 import { InvoiceExtrasService } from './invoice-extras.service';
 import { InvoicesService } from './invoices.service';
@@ -19,12 +21,12 @@ import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invoice, InvoiceLine, InvoicePenalty, Mission, MissionFieldReport, PriceItem, Company]),
+    TypeOrmModule.forFeature([Invoice, InvoiceLine, InvoicePenalty, InvoicePayment, Client, Mission, MissionFieldReport, PriceItem, Company]),
     forwardRef(() => KpiSonatelModule),
     NotificationsModule,
     SettingsModule,
   ],
-  controllers: [InvoicesController, InvoiceExtrasController],
+  controllers: [InvoicesController, InvoiceExtrasController, ClientsController],
   providers: [InvoicesService, InvoiceExtrasService, InvoicesCronService, PdfGeneratorService],
   exports: [InvoicesService, InvoicesCronService],
 })

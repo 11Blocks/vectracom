@@ -56,6 +56,9 @@ export class Incident extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   address: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
   // ----- Spécifique PBO -----
   @Column({ type: 'text', nullable: true })
   pboReference: string | null;
@@ -148,6 +151,9 @@ export class Incident extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   resolvedBy: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  closedAt: Date | null;
 
   @Column({ type: 'text', nullable: true })
   reportPdfUrl: string | null;

@@ -196,12 +196,6 @@ export class GeolocationService {
       if (byName) return byName;
     }
 
-    const leader = await this.technicianRepository.findOne({
-      where: { companyId, active: true, isTeamLeader: true },
-      order: { createdAt: 'ASC' },
-    });
-    if (leader) return leader;
-
     throw new NotFoundException(
       'Aucun technicien lié à ce compte — rattachez userId sur la fiche technicien',
     );

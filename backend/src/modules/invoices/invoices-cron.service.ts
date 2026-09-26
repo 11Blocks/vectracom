@@ -39,7 +39,7 @@ export class InvoicesCronService {
 
     for (const company of companies) {
       try {
-        const invoice = await this.invoicesService.generate(company.id, { periodStart, periodEnd }, null);
+        const invoice = await this.invoicesService.generate(company.id, { periodStart, periodEnd }, null, { skipIfPeriodExists: true });
         results.push({ company: company.name, invoice: invoice.invoiceNumber });
         this.logger.log(`Facture auto ${invoice.invoiceNumber} générée pour ${company.name}`);
 

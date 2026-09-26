@@ -80,6 +80,7 @@ export class SerialLifecycleController {
   }
 
   @Post('receive-batch')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER)
   receive(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: ReceiveBatchDto,
@@ -89,6 +90,7 @@ export class SerialLifecycleController {
   }
 
   @Post(':id/deliver')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER)
   deliver(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -99,6 +101,7 @@ export class SerialLifecycleController {
   }
 
   @Post(':id/install')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER, UserRole.CHEF_EQUIPE)
   install(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -109,6 +112,7 @@ export class SerialLifecycleController {
   }
 
   @Post(':id/return')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER, UserRole.CHEF_EQUIPE)
   returnFromField(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -119,6 +123,7 @@ export class SerialLifecycleController {
   }
 
   @Post(':id/recover')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER, UserRole.CHEF_EQUIPE)
   recover(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -129,6 +134,7 @@ export class SerialLifecycleController {
   }
 
   @Post(':id/scrap-sale')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER)
   scrapSale(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -139,6 +145,7 @@ export class SerialLifecycleController {
   }
 
   @Post('return-to-sonatel')
+  @Roles(UserRole.ADMIN, UserRole.MAGASINIER)
   returnToSonatel(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: ReturnToSonatelDto,

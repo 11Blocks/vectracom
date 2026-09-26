@@ -367,7 +367,7 @@ function Content() {
               const mo = m.getMonth();
               let count = 0;
               const sample: any[] = [];
-              for (const [k, list] of byDay) {
+              for (const [k, list] of Array.from(byDay)) {
                 const d = new Date(k);
                 if (d.getFullYear() === y && d.getMonth() === mo) {
                   count += list.length;
@@ -409,7 +409,7 @@ function Content() {
             {yearMonths.map((m) => {
               const mo = m.getMonth();
               let count = 0;
-              for (const [k, list] of byDay) {
+              for (const [k, list] of Array.from(byDay)) {
                 const d = new Date(k);
                 if (d.getFullYear() === yearAnchor && d.getMonth() === mo) count += list.length;
               }

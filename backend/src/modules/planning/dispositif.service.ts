@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { DispositifEntry } from './entities/dispositif-entry.entity';
 import { Team } from '../teams/entities/team.entity';
 import { Mission } from '../missions/entities/mission.entity';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Lot P6 — Service du dispositif quotidien :
@@ -23,6 +24,7 @@ export class DispositifService {
     private readonly teamRepository: Repository<Team>,
     @InjectRepository(Mission)
     private readonly missionRepository: Repository<Mission>,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Grille du jour (ou d'une date donnée). */
@@ -52,6 +54,9 @@ export class DispositifService {
     dto: { day: string; zoneName: string; teamName: string; axis?: string; teamId?: string; pilot?: string; instances?: number },
   ) {
     const day = dto.day.slice(0, 10);
+    if (dto.teamId && !(await this.teamRepository.findOne({ where: { companyId, id: dto.teamId } }))) {
+      throw new BadRequestException('Équipe introuvable pour ce tenant');
+    }
     let entry = await this.entryRepository.findOne({
       where: { companyId, day, zoneName: dto.zoneName, teamName: dto.teamName },
     });
@@ -176,6 +181,7 @@ export class DispositifService {
     const teamIds = [...new Set(assignments.map((a) => a.teamId))];
     const teams = teamIds.length > 0 ? await this.teamRepository.find({ where: { companyId, id: In(teamIds) } }) : [];
     const teamById = new Map(teams.map((t) => [t.id, t]));
+    const capacity = await this.settings.getTeamDailyCapacity(companyId);
 
     for (const { missionId, teamId } of assignments) {
       const mission = await this.missionRepository.findOne({ where: { companyId, id: missionId } });
@@ -188,14 +194,14 @@ export class DispositifService {
         skipped.push(missionId);
         continue;
       }
-      // Anti-double affectation : même équipe, même jour, missions ouvertes.
-      const clash = await this.missionRepository
+      // Capacité journalière de l'équipe (Paramètres → Missions, 0 = illimité).
+      const load = await this.missionRepository
         .createQueryBuilder('m')
         .where('m.company_id = :cid AND m.team_id = :tid AND m.id != :mid', { cid: companyId, tid: teamId, mid: missionId })
         .andWhere("m.status IN ('planifiee','en_cours','a_completer')")
         .andWhere('m.date_mission::date = :d', { d: new Date(mission.dateMission).toISOString().slice(0, 10) })
         .getCount();
-      if (clash > 0) {
+      if (capacity > 0 && load >= capacity) {
         skipped.push(missionId);
         continue;
       }
@@ -203,6 +209,7 @@ export class DispositifService {
       mission.importMeta = {
         ...mission.importMeta,
         teamLabel: team.name,
+        teamAssignedBy: 'auto',
         sourceFile: `repartition-auto:${new Date().toISOString().slice(0, 10)}:${userId ?? 'système'}`,
       };
       await this.missionRepository.save(mission);

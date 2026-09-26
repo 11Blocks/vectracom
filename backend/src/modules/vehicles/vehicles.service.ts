@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -69,6 +70,7 @@ export class VehiclesService {
       where: { companyId, immatriculation },
     });
     if (existing) throw new ConflictException(`Le véhicule « ${immatriculation} » existe déjà`);
+    await this.assertLinks(companyId, dto.teamId, dto.technicianId);
 
     return this.dataSource.transaction(async (em) => {
       const warehouse = await em.save(Warehouse, {
@@ -101,6 +103,8 @@ export class VehiclesService {
     const qb = this.vehicleRepository
       .createQueryBuilder('v')
       .leftJoinAndSelect('v.warehouse', 'w')
+      .leftJoinAndSelect('v.team', 'team')
+      .leftJoinAndSelect('v.technician', 'tech')
       .where('v.company_id = :companyId', { companyId })
       .orderBy('v.immatriculation', 'ASC');
     if (filters.teamId) qb.andWhere('v.team_id = :teamId', { teamId: filters.teamId });
@@ -116,7 +120,7 @@ export class VehiclesService {
   async findOne(companyId: string, id: string): Promise<Vehicle> {
     const vehicle = await this.vehicleRepository.findOne({
       where: { companyId, id },
-      relations: ['warehouse', 'team'],
+      relations: ['warehouse', 'team', 'technician'],
     });
     if (!vehicle) throw new NotFoundException('Véhicule introuvable');
     return vehicle;
@@ -141,6 +145,7 @@ export class VehiclesService {
 
   async update(companyId: string, id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
     const vehicle = await this.findOne(companyId, id);
+    await this.assertLinks(companyId, dto.teamId, dto.technicianId);
 
     if (dto.immatriculation && dto.immatriculation.trim().toUpperCase() !== vehicle.immatriculation) {
       const immat = dto.immatriculation.trim().toUpperCase();
@@ -166,7 +171,21 @@ export class VehiclesService {
       ...(dto.monthlyCost !== undefined ? { monthlyCost: dto.monthlyCost !== null ? String(dto.monthlyCost) : null } : {}),
       ...(dto.status !== undefined ? { status: dto.status as VehicleStatus } : {}),
     });
-    return this.vehicleRepository.save(vehicle);
+    // Les relations chargées par findOne masqueraient les nouveaux IDs au save.
+    const { team: _t, technician: _k, warehouse: _w, ...plain } = vehicle;
+    await this.vehicleRepository.save(plain as Vehicle);
+    return this.findOne(companyId, id);
+  }
+
+  private async assertLinks(companyId: string, teamId?: string | null, technicianId?: string | null) {
+    if (teamId) {
+      const rows = await this.dataSource.query('SELECT 1 FROM teams WHERE id = $1 AND company_id = $2', [teamId, companyId]);
+      if (!rows.length) throw new BadRequestException('Équipe introuvable pour ce tenant');
+    }
+    if (technicianId) {
+      const rows = await this.dataSource.query('SELECT 1 FROM technicians WHERE id = $1 AND company_id = $2', [technicianId, companyId]);
+      if (!rows.length) throw new BadRequestException('Technicien introuvable pour ce tenant');
+    }
   }
 
   /** Suppression : refuse si la camionnette détient encore du stock, sinon supprime véhicule + entrepôt. */

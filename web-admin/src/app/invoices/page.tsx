@@ -1,28 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Modal, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { invoicesService } from '@/services';
-import { Receipt, Loader2, Plus, ArrowRight, Wand2, CheckCircle2, Lock } from 'lucide-react';
+import { useSessionUser } from '@/components/admin/TenantPicker';
+import { invoicesService, clientsService } from '@/services';
+import { INVOICE_KIND_LABELS, INVOICE_STATUS_META, fmtDay, fmtFCFA, invoiceStatusMeta, todayIso } from '@/lib/invoice-meta';
+import { DraftLine, LinesEditor, emptyLine, linesValid, toLinePayload } from '@/components/invoices/LinesEditor';
+import { Receipt, Loader2, Plus, ArrowRight, Wand2, CheckCircle2, FilePlus2, Users, Pencil, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  brouillon: { label: 'Brouillon', cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]' },
-  en_correction: { label: 'En correction', cls: 'bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/30' },
-  finalisee: { label: 'Finalisée', cls: 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/30' },
-  envoyee: { label: 'Envoyée', cls: 'bg-[#5b8def]/20 text-[#5b8def] border-[#5b8def]/30' },
-};
-
-function fmtDate(d?: string | null) {
-  return d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-}
-function fmtFCFA(n: any) {
-  const v = Number(n);
-  return isNaN(v) ? '—' : v.toLocaleString('fr-FR') + ' FCFA';
-}
 function monthRange(month: string) {
   const [y, m] = month.split('-').map(Number);
   const last = new Date(y, m, 0).getDate();
@@ -36,28 +24,49 @@ export default function Page() {
 function Content() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useSessionUser();
+  const isAdmin = !!user && ['admin', 'super_admin'].includes(user.role);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [showClients, setShowClients] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [clientFilter, setClientFilter] = useState('');
 
   const { data, loading, refetch } = useQuery(() => invoicesService.list(), []);
-  const invoices = Array.isArray(data) ? data : [];
+  const invoices: any[] = Array.isArray(data) ? data : [];
+  const { data: clientsData, refetch: refetchClients } = useQuery(() => clientsService.list(), []);
+  const clients: any[] = Array.isArray(clientsData) ? clientsData : [];
 
   const generateMut = useMutation(
-    (p: { periodStart: string; periodEnd: string }) => invoicesService.generate(p.periodStart, p.periodEnd),
+    (p: { periodStart: string; periodEnd: string; clientId?: string }) => invoicesService.generate(p.periodStart, p.periodEnd, p.clientId),
     {
       onSuccess: (inv: any) => {
-        toast({ title: 'Facture générée', description: `${inv?.invoiceNumber ?? ''} — brouillon prêt à corriger`, variant: 'success' });
-        setShowGenerate(false); refetch();
+        toast({ title: 'Facture générée', description: `${inv?.missionCount ?? 0} mission(s) — brouillon prêt à corriger`, variant: 'success' });
+        setShowGenerate(false);
+        refetch();
+        if (inv?.id) router.push('/invoices/' + inv.id);
       },
       onError: (e: any) => toast({ title: 'Génération impossible', description: e.message, variant: 'error' }),
     },
   );
 
-  const totals = invoices.reduce((acc: any, i: any) => ({
-    ht: acc.ht + Number(i.totalHt ?? 0),
-    ttc: acc.ttc + Number(i.totalTtc ?? 0),
-    pen: acc.pen + Number(i.penaltiesTotal ?? 0),
-  }), { ht: 0, ttc: 0, pen: 0 });
-  const drafts = invoices.filter(i => i.status === 'brouillon').length;
+  const filtered = invoices.filter(i =>
+    (!statusFilter || (statusFilter === 'en_retard' ? i.overdue : i.status === statusFilter)) &&
+    (!clientFilter || i.clientId === clientFilter),
+  );
+
+  const stats = useMemo(() => {
+    const issued = invoices.filter(i => !['brouillon', 'en_correction', 'annulee'].includes(i.status) && i.kind !== 'avoir');
+    return {
+      issuedTtc: issued.reduce((s, i) => s + Number(i.totalTtc ?? 0), 0),
+      paid: issued.reduce((s, i) => s + Number(i.amountPaid ?? 0), 0),
+      remaining: issued.reduce((s, i) => s + Number(i.remaining ?? 0), 0),
+      overdue: invoices.filter(i => i.overdue).length,
+      drafts: invoices.filter(i => ['brouillon', 'en_correction'].includes(i.status)).length,
+    };
+  }, [invoices]);
+
+  const countBy = (k: string) => (k === 'en_retard' ? stats.overdue : invoices.filter(i => i.status === k).length);
 
   return (
     <div className="space-y-4">
@@ -66,59 +75,84 @@ function Content() {
           <span className="p-2 rounded-lg bg-[#0f9d70]/10 text-[#0f9d70]"><Receipt size={20} /></span>
           <div>
             <h1 className="text-xl font-bold text-[#e8ede9]">Facturation client</h1>
-            <p className="text-xs text-[#7a8f80]">ONECOMIT → SONATEL — missions clôturées valorisées au bordereau 3STB</p>
+            <p className="text-xs text-[#7a8f80]">Factures issues des missions validées, factures manuelles, encaissements et avoirs</p>
           </div>
         </div>
-        <Button onClick={() => setShowGenerate(true)}><Plus size={15} /> Générer une facture</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => router.push('/invoices/bordereau')}><FileSpreadsheet size={15} /> Bordereau de prix</Button>
+          <Button variant="secondary" onClick={() => setShowClients(true)}><Users size={15} /> Clients ({clients.length})</Button>
+          {isAdmin && <Button variant="outline" onClick={() => setShowManual(true)}><FilePlus2 size={15} /> Facture manuelle</Button>}
+          {isAdmin && <Button onClick={() => setShowGenerate(true)}><Plus size={15} /> Générer depuis les missions</Button>}
+        </div>
       </div>
 
-      {/* Synthèse */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-4"><p className="text-xs text-[#7a8f80] mb-1">Factures</p><p className="text-xl font-bold text-[#e8ede9]">{invoices.length} {drafts > 0 && <span className="text-xs font-normal text-[#f5a623]">· {drafts} brouillon(s)</span>}</p></Card>
-        <Card className="p-4"><p className="text-xs text-[#7a8f80] mb-1">Total HT cumulé</p><p className="text-xl font-bold text-[#e8ede9]">{fmtFCFA(totals.ht)}</p></Card>
-        <Card className="p-4"><p className="text-xs text-[#D9822B] mb-1">Pénalités cumulées</p><p className="text-xl font-bold text-[#D9822B]">-{fmtFCFA(totals.pen)}</p></Card>
-        <Card className="p-4 border-[#0f9d70]/30"><p className="text-xs text-[#0f9d70] mb-1">Total TTC cumulé</p><p className="text-xl font-bold text-[#0f9d70]">{fmtFCFA(totals.ttc)}</p></Card>
+        <Card className="p-4"><p className="text-xs text-[#7a8f80] mb-1">Facturé (émis, TTC)</p><p className="text-xl font-bold text-[#e8ede9]">{fmtFCFA(stats.issuedTtc)}</p>
+          {stats.drafts > 0 && <p className="text-xs text-[#f5a623] mt-0.5">{stats.drafts} brouillon(s) en cours</p>}</Card>
+        <Card className="p-4"><p className="text-xs text-[#0f9d70] mb-1">Encaissé</p><p className="text-xl font-bold text-[#0f9d70]">{fmtFCFA(stats.paid)}</p></Card>
+        <Card className="p-4"><p className="text-xs text-[#D9822B] mb-1">Reste à encaisser</p><p className="text-xl font-bold text-[#D9822B]">{fmtFCFA(stats.remaining)}</p></Card>
+        <Card className={'p-4 ' + (stats.overdue ? 'border-[#C0392B]/40' : '')}><p className="text-xs text-[#C0392B] mb-1 flex items-center gap-1"><AlertTriangle size={12} /> En retard</p><p className="text-xl font-bold text-[#C0392B]">{stats.overdue}</p></Card>
       </div>
 
-      {/* Liste */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {['', ...Object.keys(INVOICE_STATUS_META), 'en_retard'].map(k => {
+          const count = k ? countBy(k) : invoices.length;
+          if (k && !count && statusFilter !== k) return null;
+          const label = !k ? 'Toutes' : k === 'en_retard' ? 'En retard' : INVOICE_STATUS_META[k].label;
+          return (
+            <button key={k || 'all'} onClick={() => setStatusFilter(statusFilter === k ? '' : k)}
+              className={'rounded-lg border px-3 py-1.5 text-sm transition-colors ' + (statusFilter === k ? 'border-[#0f9d70] bg-[#0f9d70]/10 text-[#0f9d70]' : 'border-[#1e2e25] text-[#7a8f80] hover:text-[#e8ede9]')}>
+              {label} <span className="text-xs opacity-70">({count})</span>
+            </button>
+          );
+        })}
+        {clients.length > 1 && (
+          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)}
+            className="ml-auto h-9 px-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9]">
+            <option value="">Tous les clients</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+      </div>
+
       {loading ? (
         <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
-      ) : invoices.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
           <Receipt size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
-          <p className="text-sm text-[#7a8f80] mb-1">Aucune facture générée</p>
-          <p className="text-xs text-[#7a8f80]/70 mb-4">La génération agrège les missions clôturées du mois, regroupées par type, valorisées au bordereau, pénalités KPI déduites.</p>
-          <Button onClick={() => setShowGenerate(true)}><Plus size={15} /> Générer la première facture</Button>
+          <p className="text-sm text-[#7a8f80] mb-1">{invoices.length ? 'Aucune facture pour ce filtre' : 'Aucune facture'}</p>
+          <p className="text-xs text-[#7a8f80]/70 mb-4">Générez la facture du mois depuis les missions validées, ou créez une facture manuelle à lignes libres.</p>
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-[0.625rem] border border-[#1e2e25]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#1e2e25] bg-[#111916]">
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">N° facture</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Période</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Statut</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Total HT</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Pénalités</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Total TTC</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Finalisée le</th>
-                <th className="px-4 py-3"></th>
+                {['N°', 'Client', 'Type', 'Période / date', 'Statut', 'Total TTC', 'Reste dû', 'Échéance', ''].map((h, i) => (
+                  <th key={i} className={'px-4 py-3 text-xs font-medium text-[#7a8f80] ' + (i >= 5 && i <= 6 ? 'text-right' : 'text-left')}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2e25]/50 bg-[#111916]">
-              {invoices.map((inv: any) => {
-                const meta = STATUS_META[inv.status] ?? { label: inv.status, cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]' };
+              {filtered.map((inv: any) => {
+                const meta = invoiceStatusMeta(inv.status);
                 return (
                   <tr key={inv.id} className="hover:bg-[#172019] transition-colors cursor-pointer" onClick={() => router.push('/invoices/' + inv.id)}>
-                    <td className="px-4 py-3 font-mono text-sm text-[#0f9d70]">{inv.invoiceNumber}</td>
-                    <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">{fmtDate(inv.periodStart)} → {fmtDate(inv.periodEnd)}</td>
-                    <td className="px-4 py-3">
-                      <Badge className={meta.cls}>{meta.label === 'finalisee' ? <Lock size={10} className="mr-1" /> : null}{meta.label}</Badge>
+                    <td className="px-4 py-3 font-mono text-sm text-[#0f9d70] whitespace-nowrap">{inv.invoiceNumber}</td>
+                    <td className="px-4 py-3 text-[#e8ede9] max-w-44 truncate">{inv.clientName ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#7a8f80]">{INVOICE_KIND_LABELS[inv.kind] ?? inv.kind}</td>
+                    <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">
+                      {inv.kind === 'periodique' ? `${fmtDay(inv.periodStart)} → ${fmtDay(inv.periodEnd)}` : fmtDay(inv.issueDate ?? inv.periodStart)}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-[#e8ede9]">{fmtFCFA(inv.totalHt)}</td>
-                    <td className="px-4 py-3 text-right text-[#D9822B]">{Number(inv.penaltiesTotal) > 0 ? '-' + fmtFCFA(inv.penaltiesTotal) : '—'}</td>
-                    <td className="px-4 py-3 text-right font-bold text-[#0f9d70]">{fmtFCFA(inv.totalTtc)}</td>
-                    <td className="px-4 py-3 text-[#7a8f80]">{fmtDate(inv.finalizedAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <Badge className={meta.cls}>{meta.label}</Badge>
+                        {inv.overdue && <Badge className="bg-[#C0392B]/15 text-[#C0392B] border-[#C0392B]/30">En retard</Badge>}
+                      </div>
+                    </td>
+                    <td className={'px-4 py-3 text-right font-semibold ' + (Number(inv.totalTtc) < 0 ? 'text-[#C0392B]' : 'text-[#e8ede9]')}>{fmtFCFA(inv.totalTtc)}</td>
+                    <td className="px-4 py-3 text-right text-[#D9822B]">{Number(inv.remaining) > 0 ? fmtFCFA(inv.remaining) : '—'}</td>
+                    <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">{fmtDay(inv.dueDate)}</td>
                     <td className="px-4 py-3 text-right text-[#7a8f80]"><ArrowRight size={14} /></td>
                   </tr>
                 );
@@ -128,48 +162,189 @@ function Content() {
         </div>
       )}
 
-      {/* Modal génération */}
-      <GenerateModal open={showGenerate} onClose={() => setShowGenerate(false)} loading={generateMut.loading} existing={invoices} onSubmit={p => generateMut.mutate(p)} />
+      <GenerateModal open={showGenerate} onClose={() => setShowGenerate(false)} loading={generateMut.loading}
+        clients={clients} onSubmit={p => generateMut.mutate(p)} />
+      <ManualInvoiceModal open={showManual} onClose={() => setShowManual(false)} clients={clients}
+        onDone={(id) => { setShowManual(false); refetch(); router.push('/invoices/' + id); }} />
+      <ClientsModal open={showClients} onClose={() => setShowClients(false)} clients={clients} canEdit={isAdmin}
+        onChanged={() => { refetchClients(); refetch(); }} />
     </div>
   );
 }
 
-function GenerateModal({ open, onClose, loading, existing, onSubmit }: {
-  open: boolean; onClose: () => void; loading: boolean; existing: any[];
-  onSubmit: (p: { periodStart: string; periodEnd: string }) => void;
+function GenerateModal({ open, onClose, loading, clients, onSubmit }: {
+  open: boolean; onClose: () => void; loading: boolean; clients: any[];
+  onSubmit: (p: { periodStart: string; periodEnd: string; clientId?: string }) => void;
 }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [clientId, setClientId] = useState('');
   const { periodStart, periodEnd } = monthRange(month);
-  const alreadyExists = existing.some(i => i.periodStart === periodStart && i.periodEnd === periodEnd);
 
   return (
-    <Modal open={open} onClose={onClose} title="Générer une facture">
+    <Modal open={open} onClose={onClose} title="Générer une facture depuis les missions">
       <div className="space-y-3">
         <p className="text-sm text-[#7a8f80]">
-          La génération agrège les <b className="text-[#e8ede9]">missions clôturées</b> de la période, les regroupe par type
-          (Survey, Installation, SAV, TS, INFRA…), applique les prix du bordereau 3STB et déduit les <b className="text-[#D9822B]">pénalités KPI</b> du mois.
-          La facture est créée en <b className="text-[#e8ede9]">brouillon</b> — corrigeable ligne par ligne avant finalisation.
+          La génération reprend les <b className="text-[#e8ede9]">missions validées et pas encore facturées</b> de la période,
+          les regroupe par prestation et les valorise à la grille tarifaire. Chaque mission n’est facturée qu’une fois.
+          La facture est créée en <b className="text-[#e8ede9]">brouillon</b>, modifiable jusqu’à son émission.
         </p>
-        <div>
-          <p className="text-xs text-[#7a8f80] mb-1.5">Mois de facturation</p>
-          <input
-            type="month" value={month} onChange={e => setMonth(e.target.value)}
-            className="h-9 w-full px-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50"
-          />
-          <p className="text-xs text-[#7a8f80] mt-1.5">Période : {fmtDate(periodStart)} → {fmtDate(periodEnd)}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-[#7a8f80] mb-1.5">Mois</p>
+            <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+              className="h-10 w-full px-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50" />
+          </div>
+          <Select label="Client" value={clientId} onChange={e => setClientId(e.target.value)}>
+            <option value="">SONATEL (par défaut)</option>
+            {clients.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
         </div>
-        {alreadyExists && (
-          <p className="text-xs text-[#f5a623] flex items-center gap-1.5 rounded-lg border border-[#f5a623]/30 bg-[#f5a623]/[0.06] px-3 py-2">
-            <Wand2 size={13} /> Une facture existe déjà pour cette période exacte — le backend refusera le doublon.
-          </p>
-        )}
+        <p className="text-xs text-[#7a8f80]">Période : {fmtDay(periodStart)} → {fmtDay(periodEnd)}</p>
         <div className="flex gap-2 justify-end pt-1">
           <Button variant="secondary" onClick={onClose}>Annuler</Button>
-          <Button disabled={loading || alreadyExists} onClick={() => onSubmit({ periodStart, periodEnd })}>
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Générer le brouillon
+          <Button disabled={loading} onClick={() => onSubmit({ periodStart, periodEnd, clientId: clientId || undefined })}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Générer le brouillon
           </Button>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+function ManualInvoiceModal({ open, onClose, clients, onDone }: {
+  open: boolean; onClose: () => void; clients: any[]; onDone: (id: string) => void;
+}) {
+  const { toast } = useToast();
+  const [f, setF] = useState({ clientId: '', title: '', issueDate: todayIso(), dueDate: '', discountAmount: '', notes: '' });
+  const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
+
+  const valid = linesValid(lines);
+  const subtotal = lines.reduce((s, l) => s + Math.round((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)), 0);
+
+  const mut = useMutation(() => invoicesService.createManual({
+    clientId: f.clientId || undefined,
+    title: f.title || undefined,
+    issueDate: f.issueDate || undefined,
+    dueDate: f.dueDate || undefined,
+    discountAmount: f.discountAmount ? Number(f.discountAmount) : undefined,
+    notes: f.notes || undefined,
+    lines: lines.map(toLinePayload),
+  }), {
+    onSuccess: (inv: any) => { toast({ title: 'Facture manuelle créée', description: 'Brouillon — vérifiez puis émettez', variant: 'success' }); onDone(inv.id); },
+    onError: (e: any) => toast({ title: 'Création impossible', description: e.message, variant: 'error' }),
+  });
+
+  return (
+    <Modal open={open} onClose={onClose} title="Nouvelle facture manuelle" size="xl">
+      <form className="space-y-4" onSubmit={e => { e.preventDefault(); mut.mutate(); }}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Select label="Client" value={f.clientId} onChange={e => setF({ ...f, clientId: e.target.value })}>
+            <option value="">— Choisir —</option>
+            {clients.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+          <Input label="Objet" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} placeholder="Travaux ponctuels…" />
+          <Input label="Date de facture" type="date" value={f.issueDate} onChange={e => setF({ ...f, issueDate: e.target.value })} />
+          <Input label="Échéance (sinon délai client)" type="date" value={f.dueDate} onChange={e => setF({ ...f, dueDate: e.target.value })} />
+        </div>
+        <LinesEditor lines={lines} setLines={setLines} />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Remise (FCFA, HT)" type="number" min="0" value={f.discountAmount} onChange={e => setF({ ...f, discountAmount: e.target.value })} />
+          <div className="rounded-lg border border-[#1e2e25] bg-[#0a0f0d] p-3 text-sm">
+            <p className="text-xs text-[#7a8f80]">Sous-total des lignes</p>
+            <p className="text-lg font-bold text-[#e8ede9]">{fmtFCFA(subtotal - (Number(f.discountAmount) || 0))} <span className="text-xs font-normal text-[#7a8f80]">HT</span></p>
+          </div>
+        </div>
+        <Textarea label="Notes (imprimées sur la facture)" rows={2} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} />
+        <div className="flex gap-2 justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>Annuler</Button>
+          <Button type="submit" disabled={!valid || mut.loading}>
+            {mut.loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Créer le brouillon
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+const EMPTY_CLIENT = { name: '', code: '', ninea: '', rccm: '', address: '', city: '', contactName: '', email: '', phone: '', paymentTermsDays: '', notes: '' };
+
+function ClientsModal({ open, onClose, clients, canEdit, onChanged }: {
+  open: boolean; onClose: () => void; clients: any[]; canEdit: boolean; onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState<any | null>(null);
+  const [f, setF] = useState<Record<string, string>>(EMPTY_CLIENT);
+
+  const startEdit = (c: any | null) => {
+    setEditing(c ?? {});
+    setF(c ? Object.fromEntries(Object.keys(EMPTY_CLIENT).map(k => [k, c[k] == null ? '' : String(c[k])])) : EMPTY_CLIENT);
+  };
+
+  const saveMut = useMutation(() => {
+    const payload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(f)) {
+      if (k === 'paymentTermsDays') { if (v !== '') payload[k] = Number(v); else if (editing?.id) payload[k] = null; }
+      else if (v.trim() !== '') payload[k] = v.trim();
+      else if (editing?.id && k !== 'name') payload[k] = null;
+    }
+    return editing?.id ? clientsService.update(editing.id, payload) : clientsService.create(payload);
+  }, {
+    onSuccess: () => { toast({ title: 'Client enregistré', variant: 'success' }); setEditing(null); onChanged(); },
+    onError: (e: any) => toast({ title: 'Enregistrement impossible', description: e.message, variant: 'error' }),
+  });
+  const toggleMut = useMutation((c: any) => clientsService.update(c.id, { active: !c.active }), {
+    onSuccess: () => onChanged(),
+    onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
+  });
+
+  return (
+    <Modal open={open} onClose={onClose} title="Clients facturés" size="lg">
+      {editing ? (
+        <form className="space-y-3" onSubmit={e => { e.preventDefault(); saveMut.mutate(); }}>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Raison sociale *" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required minLength={2} />
+            <Input label="Code" value={f.code} onChange={e => setF({ ...f, code: e.target.value })} placeholder="SONATEL" />
+            <Input label="NINEA" value={f.ninea} onChange={e => setF({ ...f, ninea: e.target.value })} />
+            <Input label="RCCM" value={f.rccm} onChange={e => setF({ ...f, rccm: e.target.value })} />
+            <Input label="Adresse" value={f.address} onChange={e => setF({ ...f, address: e.target.value })} />
+            <Input label="Ville" value={f.city} onChange={e => setF({ ...f, city: e.target.value })} />
+            <Input label="Contact" value={f.contactName} onChange={e => setF({ ...f, contactName: e.target.value })} />
+            <Input label="Email" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />
+            <Input label="Téléphone" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} />
+            <Input label="Délai de paiement (jours)" type="number" min="0" max="365" value={f.paymentTermsDays} onChange={e => setF({ ...f, paymentTermsDays: e.target.value })} placeholder="30" />
+          </div>
+          <Textarea label="Notes" rows={2} value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} />
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Retour</Button>
+            <Button type="submit" disabled={saveMut.loading || f.name.trim().length < 2}>
+              {saveMut.loading && <Loader2 size={14} className="animate-spin" />} Enregistrer
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="space-y-3">
+          {canEdit && <Button size="sm" onClick={() => startEdit(null)}><Plus size={13} /> Nouveau client</Button>}
+          <div className="divide-y divide-[#1e2e25] rounded-lg border border-[#1e2e25] max-h-96 overflow-y-auto">
+            {clients.length === 0 && <p className="p-4 text-sm text-[#7a8f80]">Aucun client — SONATEL SA est créé automatiquement à la première facture périodique.</p>}
+            {clients.map(c => (
+              <div key={c.id} className="flex items-center justify-between gap-2 p-3">
+                <div className="min-w-0">
+                  <p className={'text-sm font-medium ' + (c.active ? 'text-[#e8ede9]' : 'text-[#7a8f80] line-through')}>{c.name} {c.code && <span className="text-xs text-[#7a8f80]">({c.code})</span>}</p>
+                  <p className="text-xs text-[#7a8f80] truncate">
+                    {[c.ninea && `NINEA ${c.ninea}`, c.city, c.email, c.paymentTermsDays != null && `${c.paymentTermsDays} j`].filter(Boolean).join(' · ') || '—'}
+                  </p>
+                </div>
+                {canEdit && (
+                  <div className="flex gap-1 shrink-0">
+                    <Button size="sm" variant="ghost" onClick={() => startEdit(c)} title="Modifier"><Pencil size={13} /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => toggleMut.mutate(c)}>{c.active ? 'Désactiver' : 'Réactiver'}</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

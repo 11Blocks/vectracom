@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
+import { StockMovementService } from './stock-movement.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { Warehouse } from './entities/warehouse.entity';
 import { StockItem } from './entities/stock-item.entity';
 import { StockLevel } from './entities/stock-level.entity';
@@ -19,9 +21,13 @@ export class FocusImportService {
     @InjectRepository(StockItem) private readonly itemRepo: Repository<StockItem>,
     @InjectRepository(StockLevel) private readonly levelRepo: Repository<StockLevel>,
     @InjectRepository(PriceItem) private readonly priceRepo: Repository<PriceItem>,
+    private readonly dataSource: DataSource,
+    private readonly movements: StockMovementService,
+    private readonly audit: AuditService,
   ) {}
 
-  async import(companyId: string, buffer: Buffer) {
+  /** Chaque niveau modifié devient un mouvement « ajustement » tracé (annulable). */
+  async import(companyId: string, buffer: Buffer, userId: string | null = null) {
     const wb = XLSX.read(buffer, { type: 'buffer' });
     const sheetName =
       wb.SheetNames.find((n) => /FOCUS|STOCK|DEPOT/i.test(n)) ?? wb.SheetNames[0];
@@ -98,23 +104,28 @@ export class FocusImportService {
       if (priceHit) matchedBordereau++;
 
       if (qty != null && qty >= 0) {
-        let level = await this.levelRepo.findOne({
+        if (!Number.isInteger(qty)) {
+          errors.push(`Ligne ${i + 2}: quantité non entière (${qty})`);
+          continue;
+        }
+        const level = await this.levelRepo.findOne({
           where: { stockItemId: item.id, warehouseId: wh.id },
         });
-        if (!level) {
-          level = this.levelRepo.create({
-            companyId,
-            stockItemId: item.id,
-            warehouseId: wh.id,
-            quantity: qty,
-          });
-        } else {
-          level.quantity = qty;
+        if ((level?.quantity ?? 0) !== qty) {
+          const target = item;
+          const warehouseId = wh.id;
+          await this.dataSource.transaction((em) =>
+            this.movements.recordAdjustment(em, companyId, target, warehouseId, qty, 'Import FOCUS', userId),
+          );
+          updatedLevels++;
         }
-        await this.levelRepo.save(level);
-        updatedLevels++;
       }
     }
+
+    await this.audit.log({
+      companyId, actorId: userId, action: 'stock.focus_import', entityType: 'stock', entityId: null,
+      payload: { sheet: sheetName, rows: rows.length, createdItems, updatedLevels, errors: errors.length },
+    });
 
     return {
       sheet: sheetName,

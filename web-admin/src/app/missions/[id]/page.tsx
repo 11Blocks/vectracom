@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Input, Select, Textarea, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Input, Select, Textarea, Modal, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { missionsService, stockService, siteChecklistService } from '@/services';
+import { missionsService, stockService, siteChecklistService, absoluteUploadUrl } from '@/services';
 import { FileDropzone } from '@/components/FileDropzone';
 import {
   ArrowLeft, Loader2, FileDown, ShieldCheck, CheckCircle2, XCircle, Lock,
@@ -20,6 +20,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   validee: { label: 'Validée', cls: 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/30' },
   rejetee: { label: 'Rejetée', cls: 'bg-[#C0392B]/20 text-[#C0392B] border-[#C0392B]/30' },
   a_completer: { label: 'À compléter', cls: 'bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/30' },
+  annulee: { label: 'Annulée', cls: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
 };
 const EPI_ITEMS = ['casque', 'gants', 'chaussures', 'gilet', 'harnais', 'balisage'];
 const DBM_THRESHOLD = -25;
@@ -132,13 +133,36 @@ function Content() {
       onError: (e: any) => toast({ title: 'Enregistrement refusé', description: e.message, variant: 'error' }),
     },
   );
+  const isAdmin = user && ['admin', 'super_admin'].includes(user.role);
+  const [reasonAction, setReasonAction] = useState<null | 'rejetee' | 'annulee' | 'devalider'>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const closeReason = () => { setReasonAction(null); setRejectReason(''); };
   const validateMut = useMutation(
-    (status: 'validee' | 'rejetee') => missionsService.validate(String(id), status),
+    (status: 'validee' | 'rejetee', reason?: string) => missionsService.validate(String(id), status, reason),
     {
-      onSuccess: () => { toast({ title: 'Décision enregistrée', variant: 'success' }); refetch(); },
+      onSuccess: () => { toast({ title: 'Décision enregistrée', variant: 'success' }); closeReason(); refetch(); },
       onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
     },
   );
+  const statusMut = useMutation(
+    (status: string, reason?: string) => missionsService.updateStatus(String(id), status, reason),
+    {
+      onSuccess: () => { toast({ title: 'Statut mis à jour', variant: 'success' }); closeReason(); refetch(); },
+      onError: (e: any) => toast({ title: 'Action refusée', description: e.message, variant: 'error' }),
+    },
+  );
+  const submitReason = (e: React.FormEvent) => {
+    e.preventDefault();
+    const r = rejectReason.trim();
+    if (reasonAction === 'rejetee') validateMut.mutate('rejetee', r);
+    else if (reasonAction === 'annulee') statusMut.mutate('annulee', r);
+    else if (reasonAction === 'devalider') statusMut.mutate('terminee', r);
+  };
+  const REASON_UI = {
+    rejetee: { title: 'Rejeter la mission', label: 'Motif du rejet *', cta: 'Rejeter', placeholder: 'Photos manquantes, mesure dBm hors norme…' },
+    annulee: { title: 'Annuler la mission', label: "Motif d'annulation *", cta: 'Annuler la mission', placeholder: 'Client injoignable, doublon, demande retirée…' },
+    devalider: { title: 'Dé-valider la mission', label: 'Motif de la dé-validation *', cta: 'Dé-valider', placeholder: 'Erreur de validation, contestation SONATEL…' },
+  } as const;
   const sonatelMut = useMutation(
     (status: 'approuve' | 'rejete') => missionsService.sonatelApprove(String(id), status),
     {
@@ -220,15 +244,30 @@ function Content() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={downloadPv}><FileDown size={15} /> PV de réception</Button>
-          {canValidate && fr.internalValidationStatus === 'en_attente' && fr.fieldStatus && (
+          {canValidate && fr.internalValidationStatus === 'en_attente' && fr.fieldStatus && m.status === 'terminee' && (
             <>
               <Button onClick={() => validateMut.mutate('validee')} disabled={validateMut.loading}>
                 {validateMut.loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Valider
               </Button>
-              <Button variant="danger" onClick={() => validateMut.mutate('rejetee')} disabled={validateMut.loading}>
+              <Button variant="danger" onClick={() => setReasonAction('rejetee')} disabled={validateMut.loading}>
                 <XCircle size={14} /> Rejeter
               </Button>
             </>
+          )}
+          {canValidate && ['planifiee', 'en_cours', 'a_completer'].includes(m.status) && (
+            <Button variant="outline" onClick={() => setReasonAction('annulee')} disabled={statusMut.loading}>
+              <Ban size={14} /> Annuler la mission
+            </Button>
+          )}
+          {canValidate && m.status === 'annulee' && (
+            <Button variant="outline" onClick={() => statusMut.mutate('planifiee')} disabled={statusMut.loading}>
+              {statusMut.loading ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />} Rouvrir (planifiée)
+            </Button>
+          )}
+          {isAdmin && m.status === 'validee' && !m.invoiceId && (
+            <Button variant="outline" onClick={() => setReasonAction('devalider')} disabled={statusMut.loading} title="Repasse la mission en « terminée » (admin uniquement)">
+              <XCircle size={14} /> Dé-valider
+            </Button>
           )}
           {canValidate && fr.internalValidationStatus === 'validee' && fr.sonatelApprovalStatus === 'en_attente' && (
             <>
@@ -242,6 +281,41 @@ function Content() {
           )}
         </div>
       </div>
+
+      {m.rejectionReason && ['rejetee', 'a_completer', 'en_cours'].includes(m.status) && (
+        <div className="rounded-lg border border-[#C0392B]/40 bg-[#C0392B]/10 p-3 text-sm">
+          <p className="font-semibold text-[#C0392B] flex items-center gap-1.5"><XCircle size={14} /> Rejetée{m.rejectedAt ? ` le ${fmtDate(m.rejectedAt)}` : ''}</p>
+          <p className="text-[#e8ede9] mt-1 whitespace-pre-line">{m.rejectionReason}</p>
+        </div>
+      )}
+
+      {m.status === 'annulee' && (
+        <div className="rounded-lg border border-slate-500/40 bg-slate-500/10 p-3 text-sm">
+          <p className="font-semibold text-slate-300 flex items-center gap-1.5"><Ban size={14} /> Mission annulée{m.cancelledAt ? ` le ${fmtDate(m.cancelledAt)}` : ''}</p>
+          {m.cancelReason && <p className="text-[#e8ede9] mt-1 whitespace-pre-line">{m.cancelReason}</p>}
+        </div>
+      )}
+      {m.invoiceId && (
+        <div className="rounded-lg border border-[#5b8def]/40 bg-[#5b8def]/10 p-3 text-sm flex items-center justify-between gap-2">
+          <p className="text-[#5b8def] flex items-center gap-1.5"><Lock size={14} /> Mission facturée — statut et rapport verrouillés.</p>
+          <Button size="sm" variant="outline" onClick={() => router.push('/invoices/' + m.invoiceId)}>Voir la facture</Button>
+        </div>
+      )}
+
+      <Modal open={!!reasonAction} onClose={closeReason} title={reasonAction ? REASON_UI[reasonAction].title : ''}>
+        {reasonAction && (
+          <form className="space-y-3" onSubmit={submitReason}>
+            <Textarea label={REASON_UI[reasonAction].label} rows={3} required minLength={5} value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)} placeholder={REASON_UI[reasonAction].placeholder} />
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="secondary" onClick={closeReason}>Fermer</Button>
+              <Button type="submit" variant="danger" disabled={validateMut.loading || statusMut.loading || rejectReason.trim().length < 5}>
+                {(validateMut.loading || statusMut.loading) && <Loader2 size={14} className="animate-spin" />} {REASON_UI[reasonAction].cta}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       {/* ── Infos + workflow ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -418,7 +492,7 @@ function RecettePanel({ fr, onPv }: { fr: any; onPv: () => void }) {
               <div key={t} className="flex items-center justify-between text-xs">
                 <span className="text-[#7a8f80]">{t === 'dossier_mesure_fibre' ? 'Dossier de mesure fibre' : 'Recette en surface'}</span>
                 {doc ? (
-                  <a href={doc.url} target="_blank" rel="noreferrer" className="text-[#0f9d70] hover:underline flex items-center gap-1">
+                  <a href={absoluteUploadUrl(doc.url)} target="_blank" rel="noreferrer" className="text-[#0f9d70] hover:underline flex items-center gap-1">
                     <Check size={11} /> déposé
                   </a>
                 ) : (

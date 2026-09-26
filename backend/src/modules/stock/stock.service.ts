@@ -84,9 +84,16 @@ export class StockService {
 
   async removeWarehouse(companyId: string, id: string) {
     const warehouse = await this.findWarehouse(companyId, id);
-    const levels = await this.levelRepository.count({ where: { companyId, warehouseId: id } });
-    if (levels > 0) {
+    const stocked = await this.levelRepository
+      .createQueryBuilder('l')
+      .where('l.company_id = :companyId AND l.warehouse_id = :id AND l.quantity > 0', { companyId, id })
+      .getCount();
+    if (stocked > 0) {
       throw new ConflictException('Emplacement encore approvisionné — videz-le avant suppression');
+    }
+    const vehicle = await this.levelRepository.query('SELECT immatriculation FROM vehicles WHERE warehouse_id = $1', [id]);
+    if (vehicle.length) {
+      throw new ConflictException(`Emplacement lié au véhicule ${vehicle[0].immatriculation} — supprimez le véhicule`);
     }
     await this.warehouseRepository.remove(warehouse);
     return { deleted: true };
@@ -140,6 +147,18 @@ export class StockService {
 
   async updateStockItem(companyId: string, id: string, dto: Partial<CreateStockItemDto>) {
     const item = await this.findStockItem(companyId, id);
+    if (dto.reference !== undefined && dto.reference.trim().toUpperCase() !== item.reference) {
+      const clash = await this.stockItemRepository.findOne({ where: { companyId, reference: dto.reference.trim().toUpperCase() } });
+      if (clash) throw new ConflictException(`La référence « ${dto.reference.trim().toUpperCase()} » existe déjà`);
+    }
+    if (dto.category !== undefined && dto.category !== item.category) {
+      const [used] = await this.stockItemRepository.query(
+        `SELECT (SELECT count(*) FROM stock_movements WHERE stock_item_id = $1)::int
+              + (SELECT count(*) FROM item_serials WHERE stock_item_id = $1)::int AS n`,
+        [id],
+      );
+      if (used.n > 0) throw new BadRequestException('Catégorie non modifiable : l’article a déjà des mouvements ou des numéros de série');
+    }
     Object.assign(item, {
       ...(dto.reference !== undefined ? { reference: dto.reference.trim().toUpperCase() } : {}),
       ...(dto.designation !== undefined ? { designation: dto.designation.trim() } : {}),
@@ -153,6 +172,16 @@ export class StockService {
 
   async removeStockItem(companyId: string, id: string) {
     const item = await this.findStockItem(companyId, id);
+    const [usage] = await this.stockItemRepository.query(
+      `SELECT (SELECT count(*) FROM stock_movements WHERE stock_item_id = $1)::int AS movements,
+              (SELECT COALESCE(SUM(quantity), 0) FROM stock_levels WHERE stock_item_id = $1)::int AS quantity`,
+      [id],
+    );
+    if (usage.quantity > 0 || usage.movements > 0) {
+      throw new ConflictException(
+        `Article utilisé (${usage.quantity} en stock, ${usage.movements} mouvement(s)) — suppression impossible pour garder la traçabilité`,
+      );
+    }
     await this.stockItemRepository.remove(item);
     return { deleted: true };
   }

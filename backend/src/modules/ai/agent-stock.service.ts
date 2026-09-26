@@ -27,7 +27,7 @@ export class AgentStockService {
               SUM(CASE WHEN to_char(sm.created_at, 'YYYY-MM') = to_char(now(), 'YYYY-MM') THEN sm.quantity ELSE 0 END) AS ce_mois,
               SUM(CASE WHEN to_char(sm.created_at, 'YYYY-MM') < to_char(now(), 'YYYY-MM') THEN sm.quantity ELSE 0 END) / 2.0 AS moyenne_mensuelle
        FROM stock_movements sm
-       WHERE sm.company_id = $1 AND sm.type = 'consommation'
+       WHERE sm.company_id = $1 AND sm.type = 'consommation' AND sm.cancelled_at IS NULL
        GROUP BY sm.stock_item_id`,
       [companyId],
     );

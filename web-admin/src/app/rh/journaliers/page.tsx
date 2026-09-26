@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, EmptyState, Modal, Input, Select, useToast, ConfirmDialog } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { dailyWorkersService, teamsService } from '@/services';
+import { downloadCsv } from '@/lib/csv';
 import {
-  UserCog, Plus, Loader2, Trash2, ChevronLeft, Clock, CalendarDays, Users, Edit,
+  UserCog, Plus, Loader2, Trash2, ChevronLeft, Clock, CalendarDays, Users, Edit, Download,
 } from 'lucide-react';
 
 export default function Page() {
@@ -46,7 +47,7 @@ function Content() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setTimesheetOpen(true)}><CalendarDays size={15} /> État salaires</Button>
+          <Button variant="outline" onClick={() => setTimesheetOpen(true)}><CalendarDays size={15} /> Pointage & salaires</Button>
           <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Ajouter</Button>
         </div>
       </div>
@@ -90,10 +91,12 @@ function Content() {
       )}
 
       <CreateWorkerModal open={showCreate} teams={teamsList} onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); refetch(); }} />
-      <EditWorkerModal worker={editWorker} onClose={() => setEditWorker(null)} onDone={() => { setEditWorker(null); refetch(); }} />
-      <TimesheetModal open={timesheetOpen} onClose={() => setTimesheetOpen(false)} />
+      {editWorker && (
+        <EditWorkerModal key={editWorker.id} worker={editWorker} teams={teamsList} onClose={() => setEditWorker(null)} onDone={() => { setEditWorker(null); refetch(); }} />
+      )}
+      {timesheetOpen && <TimesheetModal teams={teamsList} onClose={() => setTimesheetOpen(false)} />}
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} title="Supprimer le journalier"
-        message="Ses pointages seront conservés en historique." confirmText="Supprimer" danger
+        message="Possible uniquement s'il n'a jamais été pointé (sinon, désactivez-le pour garder l'historique de paie)." confirmText="Supprimer" danger
         onConfirm={() => deleteId && deleteMut.mutate(deleteId)} />
     </div>
   );
@@ -137,23 +140,21 @@ function CreateWorkerModal({ open, teams, onClose, onDone }: { open: boolean; te
   );
 }
 
-function EditWorkerModal({ worker, onClose, onDone }: { worker: any | null; onClose: () => void; onDone: () => void }) {
+function EditWorkerModal({ worker, teams, onClose, onDone }: { worker: any; teams: any[]; onClose: () => void; onDone: () => void }) {
   const { toast } = useToast();
-  const [f, setF] = useState({ phone: '', dailyRate: '', active: true });
-
-  useEffect(() => {
-    if (worker) {
-      setF({
-        phone: worker.phone ?? '',
-        dailyRate: worker.dailyRate != null ? String(worker.dailyRate) : '',
-        active: worker.active !== false,
-      });
-    }
-  }, [worker]);
+  const [f, setF] = useState({
+    fullName: worker.fullName ?? '',
+    teamId: worker.teamId ?? '',
+    phone: worker.phone ?? '',
+    dailyRate: worker.dailyRate != null ? String(Number(worker.dailyRate)) : '',
+    active: worker.active !== false,
+  });
 
   const mut = useMutation(
     () => dailyWorkersService.update(worker.id, {
-      phone: f.phone || undefined,
+      fullName: f.fullName.trim(),
+      teamId: f.teamId || undefined,
+      phone: f.phone,
       dailyRate: f.dailyRate !== '' ? Number(f.dailyRate) : undefined,
       active: f.active,
     }),
@@ -163,13 +164,15 @@ function EditWorkerModal({ worker, onClose, onDone }: { worker: any | null; onCl
     },
   );
 
-  if (!worker) return null;
-
   return (
-    <Modal open={!!worker} onClose={onClose} title={`Modifier — ${worker.fullName}`}>
+    <Modal open onClose={onClose} title={`Modifier — ${worker.fullName}`}>
       <form className="space-y-3" onSubmit={e => { e.preventDefault(); mut.mutate(); }}>
+        <Input label="Nom complet *" value={f.fullName} onChange={e => setF({ ...f, fullName: e.target.value })} required minLength={3} />
+        <Select label="Équipe *" value={f.teamId} onChange={e => setF({ ...f, teamId: e.target.value })} required>
+          {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </Select>
         <Input label="Téléphone" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} />
-        <Input label="Salaire / jour (F)" type="number" value={f.dailyRate} onChange={e => setF({ ...f, dailyRate: e.target.value })} />
+        <Input label="Salaire / jour (F)" type="number" min={0} value={f.dailyRate} onChange={e => setF({ ...f, dailyRate: e.target.value })} />
         <label className="flex items-center gap-2 text-sm text-[#e8ede9] cursor-pointer">
           <input type="checkbox" checked={f.active} onChange={e => setF({ ...f, active: e.target.checked })} className="h-4 w-4 accent-[#0f9d70]" />
           Actif
@@ -183,74 +186,107 @@ function EditWorkerModal({ worker, onClose, onDone }: { worker: any | null; onCl
   );
 }
 
-function TimesheetModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function TimesheetModal({ teams, onClose }: { teams: any[]; onClose: () => void }) {
+  const { toast } = useToast();
   const today = new Date().toISOString().slice(0, 10);
-  const monthStart = today.slice(0, 8) + '01';
-  const [from, setFrom] = useState(monthStart);
+  const [from, setFrom] = useState(today.slice(0, 8) + '01');
   const [to, setTo] = useState(today);
+  const [teamId, setTeamId] = useState('');
+  const [day, setDay] = useState(today);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [unclock, setUnclock] = useState<{ workerId: string; name: string; day: string } | null>(null);
 
-  const { data, loading } = useQuery(
-    () => open ? dailyWorkersService.timesheet(from, to) : Promise.resolve(null),
-    [from, to, open],
-    { immediate: false },
-  );
+  const { data, loading, refetch } = useQuery(() => dailyWorkersService.timesheet(from, to, teamId || undefined), [from, to, teamId]);
   const rows = (Array.isArray(data) ? data : []) as any[];
+  const picked = Object.entries(selected).filter(([, v]) => v).map(([k]) => k);
 
-  const clockMut = useMutation(
-    () => dailyWorkersService.clockIn(
-      Object.entries(selected).filter(([, v]) => v).map(([k]) => k),
-      today,
-    ),
-    {
-      onSuccess: (res: any) => {
-        // recharge via refetch du useQuery — simplification : fermeture/rouverture
-        window.location.reload();
-      },
-      onError: (e: Error) => window.alert('Pointage impossible : ' + e.message),
+  const clockMut = useMutation(() => dailyWorkersService.clockIn(picked, day), {
+    onSuccess: (res: any) => {
+      toast({ title: `${res?.created ?? 0} pointage(s) enregistré(s)`, description: res?.skipped ? `${res.skipped} déjà pointé(s) ce jour` : undefined, variant: 'success' });
+      setSelected({});
+      refetch();
     },
-  );
-  void clockMut;
+    onError: (e: Error) => toast({ title: 'Pointage impossible', description: e.message, variant: 'error' }),
+  });
+  const unclockMut = useMutation((workerId: string, d: string) => dailyWorkersService.removeClockIn(workerId, d), {
+    onSuccess: () => { toast({ title: 'Pointage retiré', variant: 'success' }); setUnclock(null); refetch(); },
+    onError: (e: Error) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
+  });
 
+  const totalDays = rows.reduce((s, r) => s + r.days, 0);
   const totalDue = rows.reduce((s, r) => s + r.salaryDue, 0);
+  const teamName = (id: string) => teams.find((t: any) => t.id === id)?.name ?? '—';
+  const exportCsv = () => downloadCsv(`salaires-journaliers-${from}-${to}.csv`, [
+    ['Journalier', 'Équipe', 'Jours', 'Taux/jour (F)', 'Salaire dû (F)', 'Dates'],
+    ...rows.map(r => [r.fullName, teamName(r.teamId), r.days, r.dailyRate, r.salaryDue, (r.dates ?? []).join(' ')]),
+    ['TOTAL', '', totalDays, '', totalDue, ''],
+  ]);
 
   return (
-    <Modal open={open} onClose={onClose} title="État des salaires — journaliers" size="lg">
+    <Modal open onClose={onClose} title="Pointage chantier & salaires — journaliers" size="lg">
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Input label="Du" type="date" value={from} onChange={e => setFrom(e.target.value)} />
           <Input label="Au" type="date" value={to} onChange={e => setTo(e.target.value)} />
+          <Select label="Équipe" value={teamId} onChange={e => setTeamId(e.target.value)}>
+            <option value="">Toutes</option>
+            {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </Select>
         </div>
         {loading ? <Skeleton className="h-32" /> : rows.length === 0 ? (
-          <p className="text-xs text-[#7a8f80]/70 py-4 text-center">Aucun journalier sur la période.</p>
+          <p className="text-xs text-[#7a8f80]/70 py-4 text-center">Aucun journalier.</p>
         ) : (
           <>
-            <div className="rounded-lg border border-[#1e2e25] divide-y divide-[#1e2e25]/50 overflow-hidden">
+            <div className="rounded-lg border border-[#1e2e25] divide-y divide-[#1e2e25]/50 overflow-hidden max-h-[45vh] overflow-y-auto">
               {rows.map((r: any) => (
-                <label key={r.dailyWorkerId} className="flex items-center gap-3 px-3 py-2 hover:bg-[#172019] cursor-pointer">
+                <div key={r.dailyWorkerId} className="flex items-start gap-3 px-3 py-2 hover:bg-[#172019]">
                   <input
                     type="checkbox"
+                    disabled={r.active === false}
                     checked={!!selected[r.dailyWorkerId]}
                     onChange={e => setSelected(p => ({ ...p, [r.dailyWorkerId]: e.target.checked }))}
-                    className="accent-[#0f9d70]"
+                    className="accent-[#0f9d70] mt-1"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#e8ede9] truncate">{r.fullName}</p>
-                    <p className="text-[10px] text-[#7a8f80]">{Number(r.dailyRate).toLocaleString('fr-FR')} F/jour</p>
+                    <p className="text-sm text-[#e8ede9] truncate">{r.fullName}{r.active === false && <span className="text-[10px] text-[#C0392B]"> · inactif</span>}</p>
+                    <p className="text-[10px] text-[#7a8f80]">{teamName(r.teamId)} · {Number(r.dailyRate).toLocaleString('fr-FR')} F/jour</p>
+                    {(r.dates ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {r.dates.map((d: string) => (
+                          <button key={d} type="button" title="Retirer ce pointage"
+                            onClick={() => setUnclock({ workerId: r.dailyWorkerId, name: r.fullName, day: d })}
+                            className="text-[10px] px-1.5 py-0.5 rounded border border-[#1e2e25] text-[#7a8f80] hover:border-[#C0392B]/50 hover:text-[#C0392B]">
+                            {d.slice(8, 10)}/{d.slice(5, 7)} ×
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm text-[#e8ede9] tabular-nums flex items-center gap-1 justify-end"><Clock size={11} /> {r.days} j</p>
                     <p className="text-xs text-[#D9822B] tabular-nums">{r.salaryDue.toLocaleString('fr-FR')} F</p>
                   </div>
-                </label>
+                </div>
               ))}
             </div>
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-[#7a8f80]">Total dû sur la période : <b className="text-[#e8ede9]">{totalDue.toLocaleString('fr-FR')} F</b></p>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <p className="text-xs text-[#7a8f80]">
+                Total période : <b className="text-[#e8ede9]">{totalDays} j</b> · <b className="text-[#e8ede9]">{totalDue.toLocaleString('fr-FR')} F</b>
+              </p>
+              <div className="flex items-end gap-2">
+                <Button size="sm" variant="secondary" onClick={exportCsv}><Download size={13} /> CSV</Button>
+                <Input type="date" max={today} value={day} onChange={e => setDay(e.target.value)} className="w-40" />
+                <Button size="sm" disabled={!picked.length || !day || clockMut.loading} onClick={() => clockMut.mutate()}>
+                  {clockMut.loading && <Loader2 size={13} className="animate-spin" />} Pointer ({picked.length})
+                </Button>
+              </div>
             </div>
           </>
         )}
       </div>
+      <ConfirmDialog open={!!unclock} onClose={() => setUnclock(null)} title="Retirer le pointage"
+        message={unclock ? `Retirer le pointage de ${unclock.name} du ${unclock.day.split('-').reverse().join('/')} ?` : ''}
+        confirmText="Retirer" danger onConfirm={() => unclock && unclockMut.mutate(unclock.workerId, unclock.day)} />
     </Modal>
   );
 }

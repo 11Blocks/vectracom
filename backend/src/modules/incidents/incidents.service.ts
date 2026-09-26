@@ -12,8 +12,10 @@ import {
   IncidentStatus,
 } from './entities/incident.entity';
 import { CreateIncidentDto } from './dto/create-incident.dto';
+import { UpdateIncidentDto } from './dto/update-incident.dto';
 import { Mission } from '../missions/entities/mission.entity';
 import { PdfGeneratorService } from '../../common/pdf/pdf-generator.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Transitions autorisées du cycle de vie incident. */
 const STATUS_TRANSITIONS: Record<IncidentStatus, IncidentStatus[]> = {
@@ -40,6 +42,7 @@ export class IncidentsService {
     @InjectRepository(Mission)
     private readonly missionRepository: Repository<Mission>,
     private readonly pdf: PdfGeneratorService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Numéro INC-YYYY-NNNN séquentiel par tenant et par année. */
@@ -51,7 +54,7 @@ export class IncidentsService {
 
   async create(companyId: string, dto: CreateIncidentDto, reportedBy: string | null): Promise<Incident> {
     const clients = dto.clientsImpacted ?? 0;
-    return this.incidentRepository.save(
+    const saved = await this.incidentRepository.save(
       this.incidentRepository.create({
         companyId,
         incidentNumber: await this.nextIncidentNumber(companyId),
@@ -63,6 +66,7 @@ export class IncidentsService {
         gpsLatitude: dto.gpsLatitude !== undefined ? String(dto.gpsLatitude) : null,
         gpsLongitude: dto.gpsLongitude !== undefined ? String(dto.gpsLongitude) : null,
         address: dto.address ?? null,
+        description: dto.description?.trim() || null,
         pboReference: dto.pboReference ?? null,
         pboDefaut: (dto.pboDefaut as never) ?? null,
         pboAnnee: dto.pboAnnee ?? null,
@@ -83,9 +87,45 @@ export class IncidentsService {
         photos: dto.photos ?? [],
         relatedMissionIds: dto.relatedMissionIds ?? [],
         status: 'signalement',
-        severity: severityFromClients(clients),
+        severity: (dto.severity as IncidentSeverity) ?? severityFromClients(clients),
       }),
     );
+    void this.notifyManagers(saved, reportedBy);
+    return saved;
+  }
+
+  private async assertTeam(companyId: string, teamId: string, technicianIds?: string[]) {
+    const team = await this.incidentRepository.query('SELECT 1 FROM teams WHERE id = $1 AND company_id = $2', [teamId, companyId]);
+    if (!team.length) throw new BadRequestException('Équipe introuvable pour ce tenant');
+    const ids = [...new Set(technicianIds ?? [])];
+    if (ids.length) {
+      const rows = await this.incidentRepository.query(
+        'SELECT count(*)::int AS n FROM technicians WHERE id = ANY($1::uuid[]) AND company_id = $2',
+        [ids, companyId],
+      );
+      if (rows[0].n !== ids.length) throw new BadRequestException('Technicien(s) introuvable(s) pour ce tenant');
+    }
+  }
+
+  /** Alerte in-app aux admins/direction du tenant ; n'échoue jamais la création. */
+  private async notifyManagers(incident: Incident, reportedBy: string | null) {
+    try {
+      const managers = await this.notifications.usersByRoles(incident.companyId!, ['admin', 'direction']);
+      for (const m of managers) {
+        if (m.id === reportedBy) continue;
+        await this.notifications.send({
+          companyId: incident.companyId!,
+          type: 'incident',
+          channel: 'in_app',
+          userId: m.id,
+          title: `Incident ${incident.incidentNumber} — ${incident.severity}`,
+          body: `${incident.rubrique} · ${incident.zone}${incident.clientsImpacted ? ` · ${incident.clientsImpacted} client(s) impacté(s)` : ''}`,
+          data: { incidentId: incident.id },
+        }).catch(() => undefined);
+      }
+    } catch {
+      // alerte best-effort
+    }
   }
 
   async list(
@@ -110,9 +150,34 @@ export class IncidentsService {
     return incident;
   }
 
+  async update(companyId: string, id: string, dto: UpdateIncidentDto): Promise<Incident> {
+    const incident = await this.findOne(companyId, id);
+    if (incident.status === 'cloture') throw new BadRequestException('Incident clôturé — modification impossible');
+    const { gpsLatitude, gpsLongitude, zone, ...rest } = dto;
+    Object.assign(incident, rest);
+    if (zone !== undefined) incident.zone = zone.trim();
+    if (gpsLatitude !== undefined) incident.gpsLatitude = String(gpsLatitude);
+    if (gpsLongitude !== undefined) incident.gpsLongitude = String(gpsLongitude);
+    return this.incidentRepository.save(incident);
+  }
+
+  /** Réouverture d'un incident corrigé ou clôturé (résolution jugée insuffisante). */
+  async reopen(companyId: string, id: string, reason: string): Promise<Incident> {
+    const incident = await this.findOne(companyId, id);
+    if (!['corrige', 'cloture'].includes(incident.status)) {
+      throw new BadRequestException(`Réouverture impossible depuis le statut ${incident.status}`);
+    }
+    incident.status = 'en_cours';
+    incident.closedAt = null;
+    incident.resolvedAt = null;
+    incident.validationNotes = [incident.validationNotes, `Réouvert : ${reason}`].filter(Boolean).join('\n');
+    return this.incidentRepository.save(incident);
+  }
+
   async assignTeam(companyId: string, id: string, dto: { teamId: string; technicianIds?: string[]; validationNotes?: string }) {
     const incident = await this.findOne(companyId, id);
     if (incident.status === 'cloture') throw new BadRequestException('Incident clôturé');
+    await this.assertTeam(companyId, dto.teamId, dto.technicianIds);
     incident.assignedTeamId = dto.teamId;
     incident.assignedTechnicianIds = dto.technicianIds ?? [];
     incident.assignedAt = new Date();
@@ -186,6 +251,7 @@ export class IncidentsService {
     const incident = await this.findOne(companyId, id);
     if (incident.status !== 'corrige') throw new BadRequestException('Clôture : incident doit être corrige');
     incident.status = 'cloture';
+    incident.closedAt = new Date();
     return this.incidentRepository.save(incident);
   }
 
@@ -202,6 +268,7 @@ export class IncidentsService {
   ): Promise<{ incident: Incident; created: Mission[] }> {
     const incident = await this.findOne(companyId, id);
     if (incident.status === 'cloture') throw new BadRequestException('Incident clôturé — génération SAV impossible');
+    if (dto.teamId) await this.assertTeam(companyId, dto.teamId);
 
     const nds = (incident.ndList ?? []).filter(Boolean);
     const targets = dto.mode === 'individuelle' && nds.length > 0 ? nds : [null];

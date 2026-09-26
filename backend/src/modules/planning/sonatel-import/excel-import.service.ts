@@ -9,6 +9,7 @@ import { In, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
 import { Company } from '../../auth/entities/company.entity';
 import { Mission, TERMINAL_MISSION_STATUSES } from '../../missions/entities/mission.entity';
+import { AuditService } from '../../../common/audit/audit.service';
 import { Partner } from '../../partners/entities/partner.entity';
 import { classifyBlocage } from '../../../common/sonatel-vocabulary';
 import { ColumnMappingService } from './column-mapping.service';
@@ -78,6 +79,7 @@ export class ExcelImportService {
     private readonly mappingService: ColumnMappingService,
     private readonly previewStore: PreviewStoreService,
     private readonly technicianResolver: TechnicianResolverService,
+    private readonly audit: AuditService,
   ) {}
 
   // ------------------------------------------------------------------
@@ -156,7 +158,7 @@ export class ExcelImportService {
   // 2. Confirmation : écriture idempotente en base
   // ------------------------------------------------------------------
 
-  async confirm(fileId: string, companyId: string, selectedRows?: string[]) {
+  async confirm(fileId: string, companyId: string, selectedRows?: string[], userId: string | null = null) {
     const preview = this.previewStore.get(fileId);
     if (!preview) throw new NotFoundException('Aperçu expiré ou introuvable — relancez l\'upload');
     if (preview.companyId !== companyId) {
@@ -164,28 +166,35 @@ export class ExcelImportService {
     }
 
     const selection = new Set(selectedRows ?? []);
-    const importable = preview.rows.filter(
+    const candidates = preview.rows.filter(
       (r) =>
         (r.action === 'nouvelle' || r.action === 'mise_a_jour') &&
         (selection.size === 0 || selection.has(r.dossierNumber)),
     );
+    // Un même dossier présent plusieurs fois dans le fichier : la dernière ligne l'emporte.
+    const byDossier = new Map<string, (typeof candidates)[number]>();
+    for (const r of candidates) byDossier.set(r.dossierNumber, r);
+    const importable = [...byDossier.values()];
+    const duplicatesInFile = candidates.length - importable.length;
 
     let created = 0;
     let updated = 0;
+    let skippedClosed = 0;
+    let keptManualTeam = 0;
     // Cache de résolution libellés → IDs (une équipe/technicien résolu une fois par import).
     const resolveCache = new Map<string, { teamId: string | null; technicianIds: string[] }>();
     // Partenaires du tenant : code ST (SOFATELCOM…) → id.
     const partnerRows = await this.partnerRepository.find({ where: { companyId } });
     const partnerByCode = new Map(partnerRows.map((p) => [p.code.toUpperCase(), p.id]));
 
+    // Résolution des libellés équipe/techniciens avant l'écriture.
+    const resolved = new Map<string, { teamId: string | null; technicianIds: string[]; hasLabels: boolean }>();
     for (const row of importable) {
       const teamLabel = row.team ?? null;
       const techLabels = row.technicians ?? [];
       const hasLabels = Boolean(teamLabel) || techLabels.length > 0;
-
       let teamId: string | null = null;
       let technicianIds: string[] = [];
-
       if (hasLabels) {
         const cacheKey = `${teamLabel ?? ''}|${techLabels.join(';')}`;
         if (!resolveCache.has(cacheKey)) {
@@ -194,25 +203,38 @@ export class ExcelImportService {
         }
         ({ teamId, technicianIds } = resolveCache.get(cacheKey)!);
       }
+      resolved.set(row.dossierNumber, { teamId, technicianIds, hasLabels });
+    }
 
-      const existing = await this.missionRepository.findOne({
+    // Écriture tout-ou-rien : une erreur annule l'import complet.
+    await this.missionRepository.manager.transaction(async (em) => {
+    for (const row of importable) {
+      const { teamId, technicianIds, hasLabels } = resolved.get(row.dossierNumber)!;
+
+      const existing = await em.findOne(Mission, {
         where: { companyId, sonatelDossierNumber: row.dossierNumber },
       });
 
       const extras = this.sonatelExtras(row, partnerByCode);
 
       if (existing) {
-        if (TERMINAL_MISSION_STATUSES.includes(existing.status)) continue;
+        if (TERMINAL_MISSION_STATUSES.includes(existing.status)) {
+          skippedClosed++;
+          continue;
+        }
         existing.clientSite = row.client ?? existing.clientSite;
         existing.typeTache = row.task ?? existing.typeTache;
         existing.zone = row.zone ?? existing.zone;
-        if (row.dateMission) existing.dateMission = new Date(row.dateMission);
+        // Une mission déjà démarrée garde sa date.
+        if (row.dateMission && existing.status !== 'en_cours') existing.dateMission = new Date(row.dateMission);
         existing.sonatelOlt = row.olt ?? existing.sonatelOlt;
         Object.assign(existing, extras);
-        if (hasLabels) {
+        const manualTeam = existing.importMeta?.teamAssignedBy === 'manual' && !!existing.teamId;
+        if (hasLabels && !manualTeam) {
           if (teamId) existing.teamId = teamId;
           if (technicianIds.length > 0) existing.technicianIds = technicianIds;
         }
+        if (hasLabels && manualTeam && teamId && teamId !== existing.teamId) keptManualTeam++;
         existing.importMeta = {
           ...existing.importMeta,
           teamLabel: row.team ?? null,
@@ -220,11 +242,12 @@ export class ExcelImportService {
           heureDebut: row.heureDebut ?? null,
           heureFin: row.heureFin ?? null,
           sourceFile: preview.fileName,
+          ...(hasLabels && !manualTeam && teamId ? { teamAssignedBy: 'import' as const } : {}),
         };
-        await this.missionRepository.save(existing);
+        await em.save(existing);
         updated++;
       } else {
-        await this.missionRepository.insert({
+        await em.insert(Mission, {
           companyId,
           teamId: hasLabels ? teamId : null,
           technicianIds: hasLabels ? technicianIds : [],
@@ -243,20 +266,42 @@ export class ExcelImportService {
             heureDebut: row.heureDebut ?? null,
             heureFin: row.heureFin ?? null,
             sourceFile: preview.fileName,
+            ...(hasLabels && teamId ? { teamAssignedBy: 'import' as const } : {}),
           },
         });
         created++;
       }
     }
+    });
 
     this.previewStore.delete(fileId);
     this.logger.log(`Import confirmé (${preview.fileName}) : ${created} créée(s), ${updated} mise(s) à jour`);
-    return {
+    const result = {
       fileName: preview.fileName,
       selected: importable.length,
       created,
       updated,
+      skippedClosed,
+      duplicatesInFile,
+      keptManualTeam,
     };
+    await this.audit.log({
+      companyId, actorId: userId, action: 'planning.import', entityType: 'planning_import', entityId: null,
+      payload: result,
+    });
+    return result;
+  }
+
+  /** Historique des imports planning (journal d'audit). */
+  async history(companyId: string) {
+    const rows = await this.missionRepository.query(
+      `SELECT a.created_at AS "at", a.payload, u.full_name AS "userName", u.email AS "userEmail"
+         FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+        WHERE a.company_id = $1 AND a.action = 'planning.import'
+        ORDER BY a.created_at DESC LIMIT 50`,
+      [companyId],
+    );
+    return rows;
   }
 
   // ------------------------------------------------------------------

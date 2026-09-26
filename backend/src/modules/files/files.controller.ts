@@ -9,6 +9,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FilesService, UPLOAD_CATEGORIES, UploadCategory } from './files.service';
 
 @Controller('files')
@@ -25,6 +26,7 @@ export class FilesController {
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } }))
   upload(
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser('companyId') companyId: string | null,
     @Query('category') category?: string,
   ) {
     if (!file) throw new BadRequestException('Champ « file » requis');
@@ -32,6 +34,6 @@ export class FilesController {
     if (!UPLOAD_CATEGORIES.includes(cat)) {
       throw new BadRequestException(`Catégorie invalide. Attendu : ${UPLOAD_CATEGORIES.join(', ')}`);
     }
-    return this.files.store(file, cat);
+    return this.files.store(file, cat, companyId);
   }
 }

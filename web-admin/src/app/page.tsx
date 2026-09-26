@@ -15,7 +15,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     const token = localStorage.getItem('vectracom_token');
-    if (token) router.push('/dashboard');
+    if (!token) return;
+    let role = '';
+    try { role = JSON.parse(localStorage.getItem('vectracom_user') || '{}').role ?? ''; } catch { /* session illisible */ }
+    router.push(['super_admin', 'finance_admin', 'support_admin'].includes(role) ? '/console' : role === 'magasinier' ? '/stock' : '/dashboard');
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,6 +43,7 @@ export default function LoginPage() {
       localStorage.setItem('vectracom_user', JSON.stringify(data.user));
       if (data.user?.mustChangePassword) router.push('/compte?force=1');
       else if (['super_admin', 'finance_admin', 'support_admin'].includes(data.user?.role)) router.push('/console');
+      else if (data.user?.role === 'magasinier') router.push('/stock');
       else router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');

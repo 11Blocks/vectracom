@@ -50,6 +50,8 @@ export function defaultSettings(): Record<SettingsSection, Record<string, unknow
         'SAV', 'INFRA', 'OSM', 'GC', 'PLANTATION', 'DEVOIEMENT',
       ],
       validationWorkflow: 'interne_sonatel',
+      /** Nombre maximal de missions actives par équipe et par jour (0 = illimité). */
+      maxMissionsPerTeamPerDay: 8,
       manageHint: '/parametres/formulaires',
     },
     stock: {
@@ -75,6 +77,8 @@ export function defaultSettings(): Record<SettingsSection, Record<string, unknow
       paymentTermsDays: 30,
       invoiceNumberFormat: 'FACT-{YYYY}-{####}',
       invoiceTemplate: 'standard',
+      /** false : seules les missions validées sont facturées. */
+      billTerminatedMissions: false,
       manageHint: '/invoices',
     },
     notifications: {

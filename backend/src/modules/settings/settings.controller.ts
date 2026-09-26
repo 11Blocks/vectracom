@@ -51,9 +51,18 @@ export class SettingsController {
   auditLogs(
     @CurrentUser('companyId') companyId: string | null,
     @Query('limit') limit?: string,
+    @Query('kind') kind?: string,
+    @Query('userId') userId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('q') q?: string,
+    @Query('offset') offset?: string,
+    @Query('all') all?: string,
   ) {
     this.requireTenant(companyId);
-    return this.settings.auditLogs(companyId!, limit ? Number(limit) : 50);
+    return this.settings.auditLogs(companyId!, limit ? Number(limit) : 50, {
+      kind: kind ?? (all === 'true' ? undefined : 'metier'), userId, from, to, q, offset: offset ? Number(offset) || 0 : 0,
+    });
   }
 
   @Get('export')
@@ -72,6 +81,7 @@ export class SettingsController {
   }
 
   @Put(':section')
+  @Roles(UserRole.ADMIN)
   updateSection(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
@@ -88,6 +98,7 @@ export class SettingsController {
   }
 
   @Post('import')
+  @Roles(UserRole.ADMIN)
   import(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
@@ -102,6 +113,7 @@ export class SettingsController {
   }
 
   @Post('restore-defaults')
+  @Roles(UserRole.ADMIN)
   restore(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,

@@ -8,9 +8,10 @@ import { IncidentsExtraController } from './incidents-extra.controller';
 import { Incident } from './entities/incident.entity';
 import { Mission } from '../missions/entities/mission.entity';
 import { PdfGeneratorService } from '../../common/pdf/pdf-generator.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Incident, Mission])],
+  imports: [TypeOrmModule.forFeature([Incident, Mission]), NotificationsModule],
   controllers: [IncidentsController, IncidentsExtraController],
   providers: [IncidentsService, IncidentExportService, PboImportService, PdfGeneratorService],
   exports: [IncidentsService, TypeOrmModule],

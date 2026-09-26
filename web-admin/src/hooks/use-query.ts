@@ -67,25 +67,29 @@ export function useMutation<T = any>(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<T | null>(null);
-  const { onSuccess, onError } = options;
+  // `mutate` reste stable, mais doit toujours exécuter la fonction et les callbacks du dernier rendu
+  // (sinon l'état du formulaire et les props sont figés à leur valeur initiale).
+  const fnRef = useRef(mutationFn);
+  const optionsRef = useRef(options);
+  fnRef.current = mutationFn;
+  optionsRef.current = options;
 
   const mutate = useCallback(async (...args: any[]): Promise<T | null> => {
     setLoading(true);
     setError(null);
     try {
-      const result = await mutationFn(...args);
+      const result = await fnRef.current(...args);
       setData(result);
-      onSuccess?.(result);
+      optionsRef.current.onSuccess?.(result);
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(message);
-      onError?.(err instanceof Error ? err : new Error(message));
+      optionsRef.current.onError?.(err instanceof Error ? err : new Error(message));
       return null;
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = useCallback(() => {

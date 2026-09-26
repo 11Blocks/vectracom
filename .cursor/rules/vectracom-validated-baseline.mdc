@@ -42,6 +42,17 @@ Baseline locale attendue après fill : ~759 missions, 80 incidents, FACT-202606-
 - Emails : `SMTP_URL` ou `SMTP_HOST/PORT/USER/PASS` + `MAIL_FROM` (non configurés → mdp/lien affichés à copier)
 - Monitoring : collecte auto 5 min (`MONITORING_INTERVAL_MS`, `MONITORING_COLLECT=false` pour couper)
 
+## Espace tenant — audit complet (2026-09-26, local + VPS)
+- Migrations `006`→`011` appliquées VPS (idempotentes, `psql -1 -v ON_ERROR_STOP=1`) ; sauvegarde avant déploiement dans `~/backups/vectracom_<date>/`
+- Facturation : clients, facture manuelle, correction chiffrée, en-tête, finalisation, envoi, paiements partiels, avoir/annulation, bordereau (`/invoices/bordereau`)
+- Comptabilité (caisse, dépenses), opérations (missions, validation groupée, imports), stock (mouvements annulables, inventaire), RH (embauche → employé/technicien, congés annulables, pointage journaliers, feuille de paie CSV), `/parametres/entreprise`
+- Rôles tenant : écriture admin ; direction = lecture (sauf validation missions/incidents) ; chef d'équipe = terrain ; magasinier = stock/véhicules, missions en lecture
+- Tous les IDs entrants vérifiés contre le tenant ; journal nommé `/historique` (API `settings/audit-logs` → `{items, hasMore}`, `kind=metier|http`)
+- `/uploads` protégé par jeton (`?token=` ou Bearer), rangé `uploads/<catégorie>/<companyId>/`, servi aussi sous `/api/uploads` (Caddy ne route que `/api/*` vers le backend). `UPLOADS_PUBLIC=true` = retour arrière
+- Alertes quotidiennes 07:00 UTC (`NOTIFICATIONS_CRON=false` pour couper) ; facturation automatique volontairement NON planifiée
+- IA : `GET ai/status` → `mode: regles` tant que GEMINI/YOLO non configurés (badge « Mode règles »)
+- À faire côté VPS : volume persistant pour `/app/uploads` du backend (absent du compose → fichiers perdus à chaque rebuild)
+
 ## Règles agent
 - Remplir **toute** la plateforme (pipeline produit), pas 1–2 modules isolés
 - Valider d’abord en local ; redeploy VPS seulement après OK utilisateur

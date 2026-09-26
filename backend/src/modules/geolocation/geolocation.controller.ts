@@ -149,6 +149,7 @@ export class GeolocationController {
   }
 
   @Post('positions')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
   record(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: RecordPositionDto,
@@ -159,6 +160,7 @@ export class GeolocationController {
 
   /** Mobile terrain : résout le technicien lié au JWT puis enregistre le point. */
   @Post('positions/me')
+  @Roles(UserRole.ADMIN, UserRole.CHEF_EQUIPE)
   recordMe(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
@@ -176,6 +178,7 @@ export class GeolocationController {
   }
 
   @Post('zones')
+  @Roles(UserRole.ADMIN)
   createZone(
     @CurrentUser('companyId') companyId: string | null,
     @Body() dto: CreateZoneDto,
@@ -185,6 +188,7 @@ export class GeolocationController {
   }
 
   @Put('zones/:id')
+  @Roles(UserRole.ADMIN)
   updateZone(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
@@ -195,6 +199,7 @@ export class GeolocationController {
   }
 
   @Delete('zones/:id')
+  @Roles(UserRole.ADMIN)
   deleteZone(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
     this.requireTenant(companyId);
     return this.geoService.deleteZone(companyId!, id);

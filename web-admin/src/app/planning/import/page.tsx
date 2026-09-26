@@ -4,11 +4,11 @@ import { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, useToast } from '@/components/ui';
-import { useMutation } from '@/hooks/use-query';
+import { useMutation, useQuery } from '@/hooks/use-query';
 import { planningService } from '@/services';
 import {
   Upload, FileSpreadsheet, Loader2, CheckCircle2, RefreshCw, AlertTriangle,
-  ArrowRight, ChevronLeft, Info, X, CheckSquare, Square,
+  ArrowRight, ChevronLeft, Info, X, CheckSquare, Square, History,
 } from 'lucide-react';
 
 const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
@@ -296,6 +296,13 @@ function Content() {
               <p className="text-2xl font-bold text-[#5b8def]">{result.updated}</p>
             </div>
           </div>
+          {(result.skippedClosed > 0 || result.duplicatesInFile > 0 || result.keptManualTeam > 0) && (
+            <div className="mx-auto mb-6 max-w-xl space-y-1 text-left text-xs text-[#7a8f80]">
+              {result.skippedClosed > 0 && <p>• {result.skippedClosed} mission(s) déjà clôturée(s) entre-temps — non modifiée(s).</p>}
+              {result.duplicatesInFile > 0 && <p>• {result.duplicatesInFile} doublon(s) de n° de dossier dans le fichier — seule la dernière ligne a été retenue.</p>}
+              {result.keptManualTeam > 0 && <p>• {result.keptManualTeam} mission(s) réaffectée(s) manuellement : l'équipe choisie a été conservée.</p>}
+            </div>
+          )}
           <div className="flex justify-center gap-2">
             <Button variant="secondary" onClick={reset}><Upload size={15} /> Importer un autre fichier</Button>
             <Link href="/planning">
@@ -304,6 +311,48 @@ function Content() {
           </div>
         </Card>
       )}
+
+      <ImportHistory refreshKey={result ? 1 : 0} />
     </div>
+  );
+}
+
+function ImportHistory({ refreshKey }: { refreshKey: number }) {
+  const { data, loading } = useQuery(() => planningService.importHistory(), [refreshKey]);
+  const rows = Array.isArray(data) ? data : [];
+  return (
+    <Card className="border-[#1e2e25] bg-[#111916] p-4">
+      <h3 className="text-sm font-semibold text-[#e8ede9] mb-3 flex items-center gap-2"><History size={15} className="text-[#0f9d70]" /> Historique des imports</h3>
+      {loading ? <Loader2 size={16} className="animate-spin text-[#7a8f80]" /> : rows.length === 0 ? (
+        <p className="text-xs text-[#7a8f80]">Aucun import enregistré.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#7a8f80] border-b border-[#1e2e25]">
+                <th className="py-2 text-left font-medium">Date</th>
+                <th className="py-2 text-left font-medium">Fichier</th>
+                <th className="py-2 text-left font-medium">Par</th>
+                <th className="py-2 text-right font-medium">Créées</th>
+                <th className="py-2 text-right font-medium">MAJ</th>
+                <th className="py-2 text-right font-medium">Ignorées</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1e2e25]/50">
+              {rows.map((r: any, i: number) => (
+                <tr key={i} className="text-[#e8ede9]">
+                  <td className="py-2 whitespace-nowrap">{new Date(r.at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td className="py-2 max-w-60 truncate" title={r.payload?.fileName}>{r.payload?.fileName ?? '—'}</td>
+                  <td className="py-2 text-[#7a8f80]">{r.userName ?? r.userEmail ?? '—'}</td>
+                  <td className="py-2 text-right text-[#0f9d70]">{r.payload?.created ?? 0}</td>
+                  <td className="py-2 text-right text-[#5b8def]">{r.payload?.updated ?? 0}</td>
+                  <td className="py-2 text-right text-[#7a8f80]">{(r.payload?.skippedClosed ?? 0) + (r.payload?.duplicatesInFile ?? 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }

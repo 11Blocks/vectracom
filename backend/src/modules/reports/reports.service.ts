@@ -162,7 +162,7 @@ export class ReportsService {
     const movements = await this.dataSource.query(
       `SELECT sm.stock_item_id, SUM(sm.quantity) AS quantite
        FROM stock_movements sm
-       WHERE sm.company_id = $1 AND sm.type = 'consommation'
+       WHERE sm.company_id = $1 AND sm.type = 'consommation' AND sm.cancelled_at IS NULL
          AND sm.created_at BETWEEN $2 AND $3
        GROUP BY sm.stock_item_id`,
       [companyId, new Date(startDate), new Date(`${endDate}T23:59:59.999Z`)],

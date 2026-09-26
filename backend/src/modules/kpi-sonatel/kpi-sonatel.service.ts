@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { SonatelKpiLog } from './entities/sonatel-kpi-log.entity';
@@ -13,7 +13,7 @@ import { Incident } from '../incidents/entities/incident.entity';
 import { Attendance } from '../hr/entities/attendance.entity';
 import { StockMovement } from '../stock/entities/stock-movement.entity';
 import { InvoiceLine } from '../invoices/entities/invoice-line.entity';
-import { Invoice } from '../invoices/entities/invoice.entity';
+import { EDITABLE_INVOICE_STATUSES, Invoice } from '../invoices/entities/invoice.entity';
 import { InvoicePenalty } from '../invoices/entities/invoice-penalty.entity';
 import { InvoicesService } from '../invoices/invoices.service';
 
@@ -1080,6 +1080,7 @@ export class KpiSonatelService {
         .getMany(),
       this.movementRepository.createQueryBuilder('mv')
         .where('mv.company_id = :cid AND mv.created_at BETWEEN :s AND :e', { cid: companyId, s: new Date(start.getTime() - 190 * DAY), e: end })
+        .andWhere('mv.cancelled_at IS NULL')
         .getMany(),
       this.reportRepository.query(
         `SELECT i.id, i.reference, COALESCE(SUM(l.quantity), 0) AS total, i.threshold_alert,
@@ -1388,8 +1389,14 @@ export class KpiSonatelService {
     const { evaluationDate } = periodBounds(period);
     const invoice = invoiceId
       ? await this.invoiceRepository.findOne({ where: { companyId, id: invoiceId } })
-      : await this.invoiceRepository.findOne({ where: { companyId, periodStart: evaluationDate } });
-    if (!invoice) throw new NotFoundException(`Aucune facture pour ${period} — générez-la d'abord`);
+      : await this.invoiceRepository.findOne({
+          where: { companyId, periodStart: evaluationDate, kind: 'periodique', status: In(EDITABLE_INVOICE_STATUSES) },
+          order: { createdAt: 'DESC' },
+        });
+    if (!invoice) throw new NotFoundException(`Aucune facture brouillon pour ${period} — générez-la d'abord`);
+    if (!EDITABLE_INVOICE_STATUSES.includes(invoice.status)) {
+      throw new BadRequestException(`Facture ${invoice.invoiceNumber} déjà émise (${invoice.status}) — pénalités non modifiables`);
+    }
 
     const logs = await this.logRepository.find({ where: { companyId, evaluationDate } });
     const applicable = logs.filter((l) => l.status === 'non_atteint' && Number(l.penaltyAmount) > 0);

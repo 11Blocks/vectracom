@@ -17,6 +17,23 @@ export class CashBoxEntry extends BaseEntity {
   @Column({ type: 'text' })
   period!: string;
 
+  @Column({ type: 'date' })
+  entryDate!: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string | null;
+
+  /** Ligne annulée : conservée pour la traçabilité, exclue des totaux. */
+  @Column({ type: 'timestamptz', nullable: true })
+  cancelledAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  cancelReason: string | null;
+
+  /** Remboursement : prêt d'équipe remboursé. */
+  @Column({ type: 'uuid', nullable: true })
+  loanEntryId: string | null;
+
   @Column({ type: 'text' })
   type!: CashBoxType;
 

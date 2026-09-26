@@ -26,9 +26,63 @@ const ACTION_LABELS: Record<string, string> = {
   'tenant.subscription_status': "Statut d'abonnement modifié",
   'tenant.archive': 'Tenant archivé',
   'tenant.restore': 'Tenant restauré',
+  'invoice.generate': 'Facture générée (période)',
+  'invoice.create_manual': 'Facture manuelle créée',
+  'invoice.correct': 'Ligne de facture corrigée',
+  'invoice.update_header': 'En-tête de facture modifié',
+  'invoice.finalize': 'Facture émise',
+  'invoice.send': 'Facture marquée envoyée',
+  'invoice.payment_add': 'Encaissement enregistré',
+  'invoice.payment_remove': 'Encaissement supprimé',
+  'invoice.cancel_credit_note': 'Facture annulée (avoir)',
+  'invoice.delete_draft': 'Brouillon de facture supprimé',
+  'invoice.line_add': 'Ligne ajoutée à la facture',
+  'invoice.line_remove': 'Ligne retirée de la facture',
+  'client.create': 'Client créé',
+  'client.update': 'Client modifié',
+  'cash.create': 'Mouvement de caisse',
+  'cash.update': 'Mouvement de caisse modifié',
+  'cash.cancel': 'Mouvement de caisse annulé',
+  'cash.repay': 'Remboursement de prêt',
+  'expense.create': 'Dépense créée',
+  'expense.update': 'Dépense modifiée',
+  'expense.delete': 'Dépense supprimée',
+  'price.create': 'Prix ajouté au bordereau',
+  'price.update': 'Prix modifié',
+  'price.delete': 'Prix supprimé',
+  'price.version_duplicate': 'Nouvelle version du bordereau',
+  'price.version_activate': 'Version du bordereau activée',
+  'mission.status': 'Statut de mission changé',
+  'mission.delete': 'Mission supprimée',
+  'planning.import': 'Import planning SONATEL',
+  'stock.movement': 'Mouvement de stock',
+  'stock.movement_cancel': 'Mouvement de stock annulé',
+  'stock.inventory': 'Inventaire enregistré',
+  'stock.focus_import': 'Import FOCUS (stock)',
+  'hr.hire': 'Embauche',
+  'hr.leave_approve': 'Congé approuvé',
+  'hr.leave_refuse': 'Congé refusé',
+  'hr.leave_cancel': 'Congé annulé',
+  'hr.clock_in': 'Pointage journaliers',
+  'hr.clock_in_remove': 'Pointage retiré',
 };
 
-const DANGER = new Set(['auth.login_failed', 'user.deactivate', 'tenant.deactivate', 'tenant.archive', 'auth.impersonate']);
+const DANGER = new Set([
+  'auth.login_failed', 'user.deactivate', 'tenant.deactivate', 'tenant.archive', 'auth.impersonate',
+  'invoice.cancel_credit_note', 'invoice.payment_remove', 'invoice.delete_draft', 'cash.cancel', 'expense.delete',
+  'price.delete', 'mission.delete', 'stock.movement_cancel', 'hr.leave_cancel', 'hr.clock_in_remove',
+]);
+
+const VERB: Record<string, string> = { POST: 'Création / action', PUT: 'Modification', PATCH: 'Modification', DELETE: 'Suppression' };
+
+/** « POST /api/v1/leave-requests/:id/approve → 200 » → « Création / action · leave-requests/approve (200) ». */
+function labelOf(action: string): string {
+  if (ACTION_LABELS[action]) return ACTION_LABELS[action];
+  const m = /^(POST|PUT|PATCH|DELETE) (\S+) → (\d+)$/.exec(action);
+  if (!m) return action;
+  const path = m[2].replace(/^\/?api\/v1\//, '').split('/').filter(s => s && !s.startsWith(':')).join('/');
+  return `${VERB[m[1]] ?? m[1]} · ${path} (${m[3]})`;
+}
 
 const FIELD_LABELS: Record<string, string> = {
   name: 'Nom', email: 'Email', fullName: 'Nom complet', phone: 'Téléphone', role: 'Rôle', licenseType: 'Licence',
@@ -36,6 +90,12 @@ const FIELD_LABELS: Record<string, string> = {
   address: 'Adresse', city: 'Ville', ninea: 'NINEA', rccm: 'RCCM', notes: 'Notes', maxUsers: 'Plafond utilisateurs',
   onboardingPaid: 'Onboarding payé', platformFeePaid: 'Frais plateforme payés',
   subscriptionStartDate: 'Début abonnement', subscriptionEndDate: 'Fin abonnement', trialEndDate: "Fin d'essai",
+};
+
+const PAYLOAD_LABELS: Record<string, string> = {
+  invoiceNumber: 'Facture', reference: 'Référence', type: 'Type', from: 'De', to: 'Vers', status: 'Statut',
+  amount: 'Montant', quantity: 'Quantité', reason: 'Motif', day: 'Jour', workers: 'Journaliers', name: 'Nom',
+  created: 'Créés', updated: 'Mis à jour', skipped: 'Ignorés',
 };
 
 function fmt(v: unknown) {
@@ -56,7 +116,10 @@ function describe(item: any): string | null {
   if (item.action === 'user.create') return [p.email, p.role].filter(Boolean).join(' · ') + (p.emailed ? ' · accès envoyés par email' : '');
   if (p.email) return p.email + (p.emailed ? ' · envoyé par email' : '');
   if (p.body?.error || p.error) return String(p.body?.error ?? p.error);
-  return null;
+  const parts = Object.entries(PAYLOAD_LABELS)
+    .filter(([k]) => p[k] !== undefined && p[k] !== null && typeof p[k] !== 'object')
+    .map(([k, label]) => `${label} : ${fmt(p[k])}`);
+  return parts.length ? parts.join(' · ') : null;
 }
 
 export function AuditTimeline({ fetcher, deps = [], showCompany = false }: {
@@ -111,8 +174,8 @@ export function AuditTimeline({ fetcher, deps = [], showCompany = false }: {
               <li key={item.id} className="py-2.5 flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm text-[#e8ede9] flex items-center gap-2 flex-wrap">
-                    <Badge variant={DANGER.has(item.action) ? 'danger' : ACTION_LABELS[item.action] ? 'success' : 'neutral'}>
-                      {ACTION_LABELS[item.action] ?? item.action}
+                    <Badge variant={DANGER.has(item.action) || / → [45]\d\d$/.test(item.action) ? 'danger' : ACTION_LABELS[item.action] ? 'success' : 'neutral'}>
+                      {labelOf(item.action)}
                     </Badge>
                     {showCompany && item.companyName && <span className="text-xs text-[#5b8def]">{item.companyName}</span>}
                   </p>

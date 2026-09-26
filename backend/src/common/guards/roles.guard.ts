@@ -22,8 +22,14 @@ export class RolesGuard implements CanActivate {
     if (user.role === UserRole.SUPER_ADMIN) return true;
 
     if (!required.includes(user.role as UserRole)) {
-      throw new ForbiddenException(`Rôle requis : ${required.join(', ')}`);
+      const allowed = required.map((r) => ROLE_LABELS[r] ?? r).join(', ');
+      throw new ForbiddenException(`Action réservée à : ${allowed} (votre rôle : ${ROLE_LABELS[user.role] ?? user.role})`);
     }
     return true;
   }
 }
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Super admin Green-T', finance_admin: 'Finance Green-T', support_admin: 'Support Green-T',
+  admin: 'Administrateur', direction: 'Direction', chef_equipe: "Chef d'équipe", magasinier: 'Magasinier',
+};

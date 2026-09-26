@@ -25,6 +25,7 @@ export class TechniciansService {
     if (dto.teamLeaderId) {
       await this.assertSameCompany(companyId, dto.teamLeaderId);
     }
+    if (dto.userId) await this.assertTenantUser(companyId, dto.userId);
 
     const technician = this.technicianRepository.create({
       companyId,
@@ -73,7 +74,8 @@ export class TechniciansService {
   }
 
   /**
-   * Résout le technicien du JWT (lien userId, sinon homonyme, sinon 1er chef actif).
+   * Résout le technicien du JWT (lien userId, sinon homonyme exact). Jamais de
+   * repli sur un autre technicien : un compte non rattaché n'usurpe personne.
    * Même logique que la géoloc mobile — pour présence / profil terrain.
    */
   async findMe(companyId: string, userId: string, userFullName?: string | null): Promise<Technician> {
@@ -93,13 +95,6 @@ export class TechniciansService {
         .getOne();
       if (byName) return byName;
     }
-
-    const leader = await this.technicianRepository.findOne({
-      where: { companyId, active: true, isTeamLeader: true },
-      relations: ['team'],
-      order: { createdAt: 'ASC' },
-    });
-    if (leader) return leader;
 
     throw new NotFoundException(
       'Aucun technicien lié à ce compte — rattachez userId sur la fiche technicien',
@@ -129,6 +124,7 @@ export class TechniciansService {
       }
       await this.assertSameCompany(companyId, dto.teamLeaderId);
     }
+    if (dto.userId) await this.assertTenantUser(companyId, dto.userId);
 
     Object.assign(technician, {
       ...(dto.fullName !== undefined ? { fullName: dto.fullName.trim() } : {}),
@@ -169,6 +165,14 @@ export class TechniciansService {
     );
     await this.technicianRepository.remove(technician);
     return { deleted: true, detachedBinomes: binomes.length };
+  }
+
+  private async assertTenantUser(companyId: string, userId: string) {
+    const rows = await this.technicianRepository.query(
+      'SELECT 1 FROM users WHERE id = $1 AND company_id = $2',
+      [userId, companyId],
+    );
+    if (!rows.length) throw new BadRequestException('Compte utilisateur introuvable pour ce tenant');
   }
 
   private async assertSameCompany(companyId: string, technicianId: string) {

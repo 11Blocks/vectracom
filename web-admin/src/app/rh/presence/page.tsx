@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, Input, Textarea, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { hrService, techniciansService } from '@/services';
+import { useSessionUser } from '@/components/admin/TenantPicker';
 import {
   CalendarDays, ChevronLeft, ChevronRight, Check, Loader2, Save, BadgeCheck, Users, CalendarCheck,
 } from 'lucide-react';
@@ -52,6 +53,9 @@ export default function Page() {
 
 function Content() {
   const { toast } = useToast();
+  const { user } = useSessionUser();
+  const isAdmin = user?.role === 'admin';
+  const canWrite = isAdmin || user?.role === 'chef_equipe';
   const [weekStart, setWeekStart] = useState(mondayOf(new Date()));
   const [grid, setGrid] = useState<Grid>({});
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -219,7 +223,7 @@ function Content() {
                       <td key={d.key} className="px-2 py-2.5 text-center">
                         <button
                           onClick={() => toggle(tech.id, d.key)}
-                          disabled={validated}
+                          disabled={validated || !canWrite}
                           title={days[d.key] ? 'Présent — cliquer pour retirer' : 'Absent — cliquer pour cocher'}
                           className={
                             'h-7 w-7 rounded-md border transition-all flex items-center justify-center ' +
@@ -238,7 +242,7 @@ function Content() {
                     </td>
                     <td className="px-3 py-2.5">
                       <input
-                        type="text" value={comments[tech.id] ?? ''} disabled={validated}
+                        type="text" value={comments[tech.id] ?? ''} disabled={validated || !canWrite}
                         onChange={e => { setComments(prev => ({ ...prev, [tech.id]: e.target.value })); setDirty(true); }}
                         placeholder="Remarque…"
                         className="w-full h-8 px-2.5 rounded-md bg-[#0a0f0d] border border-[#1e2e25] text-xs text-[#e8ede9] placeholder:text-[#7a8f80]/50 focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50 disabled:opacity-50"
@@ -246,11 +250,13 @@ function Content() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="secondary" className="h-8 px-2.5 text-xs" disabled={!attRow || validated || saveMut.loading}
-                          onClick={() => saveMut.mutate({ technicianId: tech.id, days, comment: comments[tech.id] })}>
-                          {saveMut.loading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
-                        </Button>
-                        {attRow && !validated && (
+                        {canWrite && (
+                          <Button size="sm" variant="secondary" className="h-8 px-2.5 text-xs" disabled={!attRow || validated || saveMut.loading}
+                            onClick={() => saveMut.mutate({ technicianId: tech.id, days, comment: comments[tech.id] })}>
+                            {saveMut.loading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
+                          </Button>
+                        )}
+                        {isAdmin && attRow && !validated && (
                           <Button size="sm" className="h-8 px-2.5 text-xs" disabled={validateMut.loading}
                             onClick={() => validateMut.mutate(attRow.id)}>
                             <BadgeCheck size={12} /> Valider

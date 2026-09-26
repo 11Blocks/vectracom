@@ -30,17 +30,20 @@ export class SerialLifecycleService {
   ) {
     const item = await this.itemRepository.findOne({ where: { companyId, reference: dto.reference } });
     if (!item) throw new NotFoundException(`Article ${dto.reference} introuvable`);
+    if (item.category !== 'ASSET') throw new BadRequestException('Réception par n° de série réservée aux articles sérialisés (ASSET)');
     let created = 0;
     for (const entry of dto.serials) {
+      const serialNumber = String(entry?.serialNumber ?? '').trim();
+      if (!serialNumber) continue;
       const existing = await this.serialRepository.findOne({
-        where: { companyId, serialNumber: entry.serialNumber },
+        where: { companyId, serialNumber },
       });
       if (existing) continue;
       await this.serialRepository.save(
         this.serialRepository.create({
           companyId,
           stockItemId: item.id,
-          serialNumber: entry.serialNumber,
+          serialNumber,
           status: 'disponible',
           cartonNumber: entry.cartonNumber ?? null,
         }),
@@ -70,13 +73,17 @@ export class SerialLifecycleService {
   async installAtClient(companyId: string, serialId: string, nd: string, missionId?: string) {
     const serial = await this.serialRepository.findOne({ where: { companyId, id: serialId } });
     if (!serial) throw new NotFoundException('N° de série introuvable');
-    if (serial.status === 'retourne') throw new BadRequestException('Équipement déjà retourné à SONATEL');
-    serial.installedAtClientNd = nd;
+    if (['retourne', 'feraillerie', 'perdu'].includes(serial.status)) {
+      throw new BadRequestException(`Équipement au statut « ${serial.status} » : pose impossible`);
+    }
+    if (!nd.trim()) throw new BadRequestException('ND client obligatoire pour la pose');
+    if (missionId) {
+      const rows = await this.serialRepository.query('SELECT 1 FROM missions WHERE id = $1 AND company_id = $2', [missionId, companyId]);
+      if (!rows.length) throw new BadRequestException('Mission introuvable pour ce tenant');
+    }
+    serial.installedAtClientNd = nd.trim();
     serial.installedAt = new Date().toISOString().slice(0, 10);
     serial.status = 'en_cours';
-    if (missionId) {
-      // tracé via le mouvement existant (missionId porté par le mouvement).
-    }
     return this.serialRepository.save(serial);
   }
 

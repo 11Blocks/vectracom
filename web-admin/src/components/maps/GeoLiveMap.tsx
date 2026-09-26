@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Map, Marker, GeoJSONSource } from 'maplibre-gl';
+import type { Map as MapLibreMap, Marker, GeoJSONSource } from 'maplibre-gl';
 import { maplibregl } from './maplibre';
 import {
   MAP_STYLE,
@@ -51,7 +51,7 @@ type Props = {
 
 export function GeoLiveMap({ markers, zones, onSelect, className, height = 420 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const dataRef = useRef({ markers, zones });
   const onSelectRef = useRef(onSelect);
@@ -67,7 +67,7 @@ export function GeoLiveMap({ markers, zones, onSelect, className, height = 420 }
 
     let cancelled = false;
     let usedFallback = false;
-    let map: Map;
+    let map: MapLibreMap;
 
     try {
       map = new maplibregl.Map({

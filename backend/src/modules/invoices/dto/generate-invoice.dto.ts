@@ -1,4 +1,4 @@
-import { IsDateString } from 'class-validator';
+import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class GenerateInvoiceDto {
   @IsDateString()
@@ -6,4 +6,8 @@ export class GenerateInvoiceDto {
 
   @IsDateString()
   periodEnd!: string;
+
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
 }
