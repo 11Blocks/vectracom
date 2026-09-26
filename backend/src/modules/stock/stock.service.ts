@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { pageParams } from '../../common/pagination';
 import { Warehouse, WarehouseType } from './entities/warehouse.entity';
 import { StockItem, StockCategory, StockFamily } from './entities/stock-item.entity';
 import { ItemSerial, SerialStatus } from './entities/item-serial.entity';
@@ -207,11 +208,16 @@ export class StockService {
     );
   }
 
-  async listSerials(companyId: string, stockItemId: string): Promise<ItemSerial[]> {
+  async listSerials(
+    companyId: string,
+    stockItemId: string,
+    page: { limit?: number; offset?: number } = {},
+  ): Promise<[ItemSerial[], number]> {
     await this.findStockItem(companyId, stockItemId);
-    return this.serialRepository.find({
+    return this.serialRepository.findAndCount({
       where: { companyId, stockItemId },
       order: { serialNumber: 'ASC' },
+      ...pageParams(page, 1000),
     });
   }
 

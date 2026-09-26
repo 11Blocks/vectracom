@@ -7,6 +7,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AppModule } from './app.module';
 import { uploadsGuard } from './common/uploads-guard';
+import { TOTAL_COUNT_HEADER } from './common/pagination';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -37,7 +38,7 @@ async function bootstrap() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-  app.enableCors({ origin: corsOrigins, credentials: true });
+  app.enableCors({ origin: corsOrigins, credentials: true, exposedHeaders: [TOTAL_COUNT_HEADER] });
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);

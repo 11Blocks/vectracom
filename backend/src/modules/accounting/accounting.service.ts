@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { EXPENSE_CATEGORIES, Expense, ExpenseCategory } from './entities/expense.entity';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { AuditService } from '../../common/audit/audit.service';
+import { pageParams } from '../../common/pagination';
 
 export interface MonthlySummaryLine {
   category: ExpenseCategory;
@@ -54,8 +55,12 @@ export class AccountingService {
 
   async list(
     companyId: string,
-    filters: { category?: string; vehicleId?: string; technicianId?: string; missionId?: string; month?: string; from?: string; to?: string },
+    filters: {
+      category?: string; vehicleId?: string; technicianId?: string; missionId?: string;
+      month?: string; from?: string; to?: string; search?: string; limit?: number; offset?: number;
+    },
   ) {
+    const { take, skip } = pageParams(filters, 2000);
     const qb = this.expenseRepository
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.vehicle', 'vehicle')
@@ -64,7 +69,8 @@ export class AccountingService {
       .where('e.company_id = :companyId', { companyId })
       .orderBy('e.expenseDate', 'DESC')
       .addOrderBy('e.createdAt', 'DESC')
-      .take(2000);
+      .take(take)
+      .skip(skip);
     if (filters.month) {
       const { from, to } = monthBounds(filters.month);
       qb.andWhere('e.expense_date BETWEEN :from AND :to', { from, to });
@@ -76,7 +82,10 @@ export class AccountingService {
     if (filters.vehicleId) qb.andWhere('e.vehicle_id = :vehicleId', { vehicleId: filters.vehicleId });
     if (filters.technicianId) qb.andWhere('e.technician_id = :techId', { techId: filters.technicianId });
     if (filters.missionId) qb.andWhere('e.mission_id = :missionId', { missionId: filters.missionId });
-    return qb.getMany();
+    if (filters.search?.trim()) {
+      qb.andWhere('(e.description ILIKE :q OR e.category ILIKE :q OR e.amount::text ILIKE :q)', { q: `%${filters.search.trim()}%` });
+    }
+    return qb.getManyAndCount();
   }
 
   async findOne(companyId: string, id: string) {

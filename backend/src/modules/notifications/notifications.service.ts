@@ -9,6 +9,7 @@ import { ExpoService } from './integrations/expo.service';
 import { WhatsAppService } from './integrations/whatsapp.service';
 import { EmailService } from './integrations/email.service';
 import { TelegramService } from './integrations/telegram.service';
+import { pageParams } from '../../common/pagination';
 
 export interface SendNotificationInput {
   companyId: string;
@@ -78,14 +79,17 @@ export class NotificationsService {
     );
   }
 
-  list(companyId: string, userId: string, filters: { unreadOnly?: boolean }) {
+  list(companyId: string, userId: string, filters: { unreadOnly?: boolean; limit?: number; offset?: number }) {
+    const { take, skip } = pageParams(filters, 200, 1000);
     const qb = this.notificationRepository
       .createQueryBuilder('n')
       .where('n.company_id = :companyId AND n.user_id = :userId', { companyId, userId })
       .orderBy('n.createdAt', 'DESC')
-      .take(200);
+      .addOrderBy('n.id', 'DESC')
+      .take(take)
+      .skip(skip);
     if (filters.unreadOnly) qb.andWhere('n.read_at IS NULL');
-    return qb.getMany();
+    return qb.getManyAndCount();
   }
 
   async markAsRead(companyId: string, userId: string, id: string) {

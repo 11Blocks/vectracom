@@ -10,12 +10,15 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { IsBooleanString, IsIn, IsNumberString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBooleanString, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StockService } from './stock.service';
@@ -40,13 +43,12 @@ class ListStockItemsQueryDto {
   @IsOptional() @IsBooleanString() lowStock?: string;
 }
 
-class ListMovementsQueryDto {
+class ListMovementsQueryDto extends PageQueryDto {
   @IsOptional() @IsString() @IsIn(MOVEMENT_TYPES as unknown as string[]) type?: string;
   @IsOptional() @IsUUID() stockItemId?: string;
   @IsOptional() @IsUUID() warehouseId?: string;
   @IsOptional() @IsUUID() missionId?: string;
   @IsOptional() @IsBooleanString() includeCancelled?: string;
-  @IsOptional() @IsNumberString() limit?: string;
 }
 
 @Controller()
@@ -163,9 +165,14 @@ export class StockController {
   }
 
   @Get('stock-items/:id/serials')
-  serials(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+  async serials(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Query() query: PageQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     this.requireTenant(companyId);
-    return this.stockService.listSerials(companyId!, id);
+    return withTotal(res, await this.stockService.listSerials(companyId!, id, query));
   }
 
   @Post('stock-items/:id/serials')
@@ -188,16 +195,21 @@ export class StockController {
   // ------------------- Mouvements -------------------
 
   @Get('stock-movements')
-  movements(@CurrentUser('companyId') companyId: string | null, @Query() query: ListMovementsQueryDto) {
+  async movements(
+    @CurrentUser('companyId') companyId: string | null,
+    @Query() query: ListMovementsQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     this.requireTenant(companyId);
-    return this.movementService.list(companyId!, {
+    return withTotal(res, await this.movementService.list(companyId!, {
       type: query.type,
       stockItemId: query.stockItemId,
       warehouseId: query.warehouseId,
       missionId: query.missionId,
       includeCancelled: query.includeCancelled !== 'false',
-      limit: query.limit ? Number(query.limit) : undefined,
-    });
+      limit: query.limit,
+      offset: query.offset,
+    }));
   }
 
   @Post('stock-movements')

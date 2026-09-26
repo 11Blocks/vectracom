@@ -16,6 +16,7 @@ import { UpdateIncidentDto } from './dto/update-incident.dto';
 import { Mission } from '../missions/entities/mission.entity';
 import { PdfGeneratorService } from '../../common/pdf/pdf-generator.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { pageParams } from '../../common/pagination';
 
 /** Transitions autorisées du cycle de vie incident. */
 const STATUS_TRANSITIONS: Record<IncidentStatus, IncidentStatus[]> = {
@@ -34,6 +35,19 @@ export function severityFromClients(clients: number): IncidentSeverity {
   return 'INFORMATION';
 }
 
+/** Numéro INC-YYYY-NNNN séquentiel par tenant et par année (max + 1 : robuste aux suppressions et imports). */
+export async function nextIncidentNumber(repo: Repository<Incident>, companyId: string): Promise<string> {
+  const year = new Date().getUTCFullYear();
+  const prefix = `INC-${year}-`;
+  const row = await repo
+    .createQueryBuilder('i')
+    .select(`COALESCE(MAX(CAST(SUBSTRING(i.incidentNumber FROM ${prefix.length + 1}) AS integer)), 0)`, 'mx')
+    .where('i.companyId = :companyId', { companyId })
+    .andWhere('i.incidentNumber ~ :pattern', { pattern: `^${prefix}[0-9]+$` })
+    .getRawOne<{ mx: number | string }>();
+  return `${prefix}${String(Number(row?.mx ?? 0) + 1).padStart(4, '0')}`;
+}
+
 @Injectable()
 export class IncidentsService {
   constructor(
@@ -45,19 +59,12 @@ export class IncidentsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  /** Numéro INC-YYYY-NNNN séquentiel par tenant et par année. */
-  private async nextIncidentNumber(companyId: string): Promise<string> {
-    const year = new Date().getUTCFullYear();
-    const count = await this.incidentRepository.count({ where: { companyId } });
-    return `INC-${year}-${String(count + 1).padStart(4, '0')}`;
-  }
-
   async create(companyId: string, dto: CreateIncidentDto, reportedBy: string | null): Promise<Incident> {
     const clients = dto.clientsImpacted ?? 0;
     const saved = await this.incidentRepository.save(
       this.incidentRepository.create({
         companyId,
-        incidentNumber: await this.nextIncidentNumber(companyId),
+        incidentNumber: await nextIncidentNumber(this.incidentRepository, companyId),
         source: (dto.source as never) ?? 'WHATSAPP',
         reportedBy,
         rubrique: dto.rubrique as IncidentRubrique,
@@ -130,18 +137,48 @@ export class IncidentsService {
 
   async list(
     companyId: string,
-    filters: { rubrique?: string; status?: string; zone?: string; severity?: string },
+    filters: {
+      rubrique?: string; status?: string; zone?: string; severity?: string;
+      search?: string; from?: string; to?: string; limit?: number; offset?: number;
+    },
   ) {
+    const { take, skip } = pageParams(filters, 500, 2000);
     const qb = this.incidentRepository
       .createQueryBuilder('i')
       .where('i.company_id = :companyId', { companyId })
       .orderBy('i.reportedAt', 'DESC')
-      .take(500);
+      .addOrderBy('i.id', 'DESC')
+      .take(take)
+      .skip(skip);
     if (filters.rubrique) qb.andWhere('i.rubrique = :r', { r: filters.rubrique });
     if (filters.status) qb.andWhere('i.status = :s', { s: filters.status });
     if (filters.severity) qb.andWhere('i.severity = :sev', { sev: filters.severity });
     if (filters.zone) qb.andWhere('i.zone ILIKE :z', { z: `%${filters.zone}%` });
-    return qb.getMany();
+    if (filters.from) qb.andWhere('i.reported_at >= :from', { from: filters.from });
+    if (filters.to) qb.andWhere('i.reported_at <= :to', { to: filters.to });
+    if (filters.search?.trim()) {
+      qb.andWhere(
+        `(i.incident_number ILIKE :q OR i.zone ILIKE :q OR i.olt ILIKE :q OR i.address ILIKE :q
+          OR i.description ILIKE :q OR i.pbo_reference ILIKE :q OR i.annotation_originale ILIKE :q)`,
+        { q: `%${filters.search.trim()}%` },
+      );
+    }
+    return qb.getManyAndCount();
+  }
+
+  async stats(companyId: string) {
+    const count = async (column: 'status' | 'severity' | 'rubrique') => {
+      const rows = await this.incidentRepository
+        .createQueryBuilder('i')
+        .select(`i.${column}`, 'k')
+        .addSelect('COUNT(*)::int', 'n')
+        .where('i.company_id = :companyId', { companyId })
+        .groupBy(`i.${column}`)
+        .getRawMany<{ k: string; n: number }>();
+      return Object.fromEntries(rows.map((r) => [r.k, Number(r.n)])) as Record<string, number>;
+    };
+    const [byStatus, bySeverity, byRubrique] = await Promise.all([count('status'), count('severity'), count('rubrique')]);
+    return { byStatus, bySeverity, byRubrique };
   }
 
   async findOne(companyId: string, id: string): Promise<Incident> {

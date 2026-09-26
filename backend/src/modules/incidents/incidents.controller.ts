@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import { IsISO8601, IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { IncidentsService } from './incidents.service';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { AssignIncidentDto } from './dto/assign-incident.dto';
@@ -27,11 +28,14 @@ import {
   INCIDENT_STATUSES,
 } from './entities/incident.entity';
 
-class ListIncidentsQueryDto {
+class ListIncidentsQueryDto extends PageQueryDto {
   @IsOptional() @IsString() @IsIn(INCIDENT_RUBRIQUES as unknown as string[]) rubrique?: string;
   @IsOptional() @IsString() @IsIn(INCIDENT_STATUSES as unknown as string[]) status?: string;
   @IsOptional() @IsString() @IsIn(INCIDENT_SEVERITIES as unknown as string[]) severity?: string;
   @IsOptional() @IsString() zone?: string;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsISO8601() from?: string;
+  @IsOptional() @IsISO8601() to?: string;
 }
 
 class ReopenIncidentDto {
@@ -57,9 +61,13 @@ export class IncidentsController {
   constructor(private readonly incidentsService: IncidentsService) {}
 
   @Get()
-  list(@CurrentUser('companyId') companyId: string | null, @Query() query: ListIncidentsQueryDto) {
+  async list(
+    @CurrentUser('companyId') companyId: string | null,
+    @Query() query: ListIncidentsQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     this.requireTenant(companyId);
-    return this.incidentsService.list(companyId!, query);
+    return withTotal(res, await this.incidentsService.list(companyId!, query));
   }
 
   /** Signalement terrain (chef d'équipe) ou remontée WhatsApp. */
@@ -71,6 +79,13 @@ export class IncidentsController {
   ) {
     this.requireTenant(companyId);
     return this.incidentsService.create(companyId!, dto, userId);
+  }
+
+  /** Compteurs globaux (cartes de la liste) : statut, sévérité, rubrique. */
+  @Get('stats')
+  stats(@CurrentUser('companyId') companyId: string | null) {
+    this.requireTenant(companyId);
+    return this.incidentsService.stats(companyId!);
   }
 
   @Get(':id')

@@ -1,5 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { withTotal } from '../../common/pagination';
 import { Roles, UserRole, GREEN_T_ROLES } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SaasService, SubscriptionService } from './saas.service';
@@ -31,6 +34,9 @@ class TrackUsageDto {
 
 class InvoicesQueryDto extends TenantScopedQuery {
   @IsOptional() @IsString() @IsIn(INVOICE_SAAS_STATUSES as unknown as string[]) status?: string;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(2000) limit?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
 }
 
 /**
@@ -174,13 +180,14 @@ export class SaasController {
 
   /** Console Green-T sans ?companyId= : factures de tous les tenants. */
   @Get('invoices')
-  invoices(
+  async invoices(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('role') role: string,
     @Query() query: InvoicesQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const tenant = companyId ?? (this.isConsole(role) ? query.companyId ?? null : this.resolveTenant(companyId, role));
-    return this.invoicesSaas.list(tenant, { status: query.status });
+    return withTotal(res, await this.invoicesSaas.list(tenant, { status: query.status, search: query.search, limit: query.limit, offset: query.offset }));
   }
 
   @Get('invoices-summary')

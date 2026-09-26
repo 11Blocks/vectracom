@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
+import { useDebounced } from '@/hooks/use-debounced';
 import { incidentsService } from '@/services';
 import {
   AlertTriangle, Plus, Search, Loader2, ArrowRight, MapPin, Users,
@@ -86,27 +87,29 @@ function Content() {
     }
   };
 
-  const params: Record<string, string> = {};
-  if (statusFilter) params.status = statusFilter;
-  if (rubriqueFilter) params.rubrique = rubriqueFilter;
+  const q = useDebounced(search.trim());
+  const pager = usePagination(50, `${statusFilter}|${rubriqueFilter}|${q}`);
 
-  const { data, loading, refetch } = useQuery(
-    () => incidentsService.list(Object.keys(params).length ? params : undefined),
-    [statusFilter, rubriqueFilter],
+  const { data, loading, refetch: refetchPage } = useQuery(
+    () => incidentsService.page({
+      status: statusFilter || undefined,
+      rubrique: rubriqueFilter || undefined,
+      search: q || undefined,
+      ...pager.params,
+    }),
+    [statusFilter, rubriqueFilter, q, pager.offset, pager.limit],
   );
-  // Le filtre rubrique n'est pas supporté côté API : filtrage local complémentaire
-  const allIncidents = Array.isArray(data) ? data : [];
-  const incidents = rubriqueFilter ? allIncidents.filter(i => i.rubrique === rubriqueFilter) : allIncidents;
+  const { data: counters, refetch: refetchStats } = useQuery(() => incidentsService.stats(), []);
+  const refetch = () => { refetchPage(); refetchStats(); };
+  const list: any[] = data?.items ?? [];
+  const total = data?.total ?? 0;
 
-  const list = incidents.filter(i =>
-    !search || `${i.incidentNumber} ${i.zone} ${i.description ?? ''}`.toLowerCase().includes(search.toLowerCase())
-  );
-
+  const byStatus = counters?.byStatus ?? {};
   const stats = [
-    { label: 'Critiques', value: allIncidents.filter(i => i.severity === 'CRITICAL').length, color: 'text-[#C0392B]' },
-    { label: 'En cours', value: allIncidents.filter(i => i.status === 'en_cours').length, color: 'text-[#5b8def]' },
-    { label: 'En attente', value: allIncidents.filter(i => i.status === 'signalement' || i.status === 'en_attente').length, color: 'text-[#f5a623]' },
-    { label: 'Résolus', value: allIncidents.filter(i => i.status === 'corrige' || i.status === 'cloture').length, color: 'text-[#0f9d70]' },
+    { label: 'Critiques', value: counters?.bySeverity?.CRITICAL ?? 0, color: 'text-[#C0392B]' },
+    { label: 'En cours', value: byStatus.en_cours ?? 0, color: 'text-[#5b8def]' },
+    { label: 'En attente', value: (byStatus.signalement ?? 0) + (byStatus.en_attente ?? 0), color: 'text-[#f5a623]' },
+    { label: 'Résolus', value: (byStatus.corrige ?? 0) + (byStatus.cloture ?? 0), color: 'text-[#0f9d70]' },
   ];
 
   return (
@@ -144,7 +147,7 @@ function Content() {
       {/* Par rubrique */}
       <div className="grid grid-cols-3 gap-3">
         {Object.entries(RUBRIQUE_META).map(([k, m]) => {
-          const count = allIncidents.filter(i => i.rubrique === k).length;
+          const count = counters?.byRubrique?.[k] ?? 0;
           const Icon = m.icon;
           return (
             <Card key={k} className="p-3 flex items-center gap-3">
@@ -176,16 +179,17 @@ function Content() {
       </div>
 
       {/* Liste */}
-      {loading ? (
+      {loading && !data ? (
         <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
       ) : list.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
           <AlertTriangle size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
-          <p className="text-sm text-[#7a8f80] mb-4">Aucun incident</p>
+          <p className="text-sm text-[#7a8f80] mb-4">{q || statusFilter || rubriqueFilter ? 'Aucun incident ne correspond aux filtres.' : 'Aucun incident'}</p>
           <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Signaler un incident</Button>
         </Card>
       ) : (
         <div className="space-y-2">
+          <p className="text-xs text-[#7a8f80]">{total.toLocaleString('fr-FR')} incident(s)</p>
           {list.map((inc: any) => {
             const st = STATUS_META[inc.status] ?? { label: inc.status, cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]' };
             const sv = SEV_META[inc.severity] ?? SEV_META.INFORMATION;
@@ -216,6 +220,8 @@ function Content() {
               </Card>
             );
           })}
+          <Pager className="rounded-lg border border-[#1e2e25] bg-[#111916]" total={total} offset={pager.offset} limit={pager.limit}
+            onChange={pager.setOffset} onLimitChange={pager.setLimit} />
         </div>
       )}
 

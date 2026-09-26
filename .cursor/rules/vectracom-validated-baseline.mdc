@@ -53,6 +53,16 @@ Baseline locale attendue après fill : ~759 missions, 80 incidents, FACT-202606-
 - IA : `GET ai/status` → `mode: regles` tant que GEMINI/YOLO non configurés (badge « Mode règles »)
 - VPS : volume nommé `vectracom_uploads` monté sur `/app/uploads` du backend (ajouté au compose VPS le 2026-09-26 avec accord ; sauvegarde `~/backups/compose_uploads_20260926_073103/`) — ne jamais le supprimer
 
+## Graphiques, données démo, pagination (2026-09-26, local + VPS)
+- Tableau de bord : `GET dashboard/summary?days=7|14|30` (agrégats SQL jour par jour + KPI ; incidents `null` pour magasinier) ; incidents critiques = CRITICAL/MAJEUR non corrigés/clôturés
+- Performance : `GET performance/latest` = semaine par défaut ; `trend` = semaines ISO contiguës jusqu'à la semaine courante (clé année-semaine)
+- Graphiques vides : composant `ChartEmpty` (dernières dates + lien), jamais un graphique muet
+- Numérotation incidents : `nextIncidentNumber` = MAX du suffixe `INC-AAAA-NNNN` + 1 (jamais un count)
+- Données démo prolongées jusqu'au 2026-09-26 : `scripts/demo-prolongation.sql` (idempotent, marqueurs `import_meta.prolongedFrom` / `annotation_parse.prolongedFrom`) — à rejouer pour avancer encore (adapter les bornes)
+- Pagination : `backend/src/common/pagination.ts` (`PageQueryDto`, `pageParams`, `withTotal`) ; corps = tableau (compatibilité mobile), total dans l'en-tête `X-Total-Count` (exposé CORS) ; web : `api.getPage` → `{items, total}`, `Pager` + `usePagination(limite, cléFiltres)`, recherche serveur via `useDebounced`
+- Listes paginées : missions, incidents, factures, mouvements de stock, dépenses, notifications, factures SaaS (+ `missions/status-counts`, `incidents/stats`, `invoices/summary` pour les compteurs) ; planning calendrier = plage from/to
+- Restes connus : vue Tableau du planning plafonnée à 2000, géolocalisation live = scan complet
+
 ## Règles agent
 - Remplir **toute** la plateforme (pipeline produit), pas 1–2 modules isolés
 - Valider d’abord en local ; redeploy VPS seulement après OK utilisateur

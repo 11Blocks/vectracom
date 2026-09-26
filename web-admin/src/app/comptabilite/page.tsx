@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Modal, Card, Skeleton, StatCard, Input, Select, Textarea, ConfirmDialog, AiBlock, useToast } from '@/components/ui';
+import { Button, Badge, Modal, Card, Skeleton, StatCard, Input, Select, Textarea, ConfirmDialog, AiBlock, useToast, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
+import { useDebounced } from '@/hooks/use-debounced';
 import { accountingService, aiService, techniciansService, vehiclesService, cashBoxService } from '@/services';
 import { FileDropzone } from '@/components/FileDropzone';
 import { downloadCsv } from '@/lib/csv';
@@ -49,9 +50,12 @@ function Content() {
   const [editExpense, setEditExpense] = useState<any | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const q = useDebounced(search.trim());
+  const pager = usePagination(50, `${month}|${categoryFilter}|${q}`);
+  const filters = { month, category: categoryFilter || undefined, search: q || undefined };
   const { data: expenses, loading, refetch } = useQuery(
-    () => accountingService.listExpenses({ month, ...(categoryFilter ? { category: categoryFilter } : {}) }),
-    [categoryFilter, month],
+    () => accountingService.pageExpenses({ ...filters, ...pager.params }),
+    [categoryFilter, month, q, pager.offset, pager.limit],
   );
   const { data: summary, refetch: refetchSummary } = useQuery(
     () => accountingService.summary(month), [month],
@@ -66,9 +70,19 @@ function Content() {
     onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
   });
 
-  const list = (Array.isArray(expenses) ? expenses : []).filter((x: any) =>
-    !search || [x.description, x.category, x.amount].some(v => String(v ?? '').toLowerCase().includes(search.toLowerCase())),
-  );
+  const list: any[] = expenses?.items ?? [];
+  const expenseCount = expenses?.total ?? 0;
+  const exportCsv = async () => {
+    try {
+      const all: any[] = (await accountingService.pageExpenses({ ...filters, limit: '5000' })).items;
+      downloadCsv(`depenses-${month}.csv`, [
+        ['Date', 'Catégorie', 'Montant', 'Description', 'Technicien', 'Véhicule', 'Source'],
+        ...all.map((x: any) => [x.expenseDate ?? '', CAT_LABEL[x.category] ?? x.category, Number(x.amount), x.description ?? '', techName(x.technicianId) ?? '', vehicleName(x.vehicleId) ?? '', x.aiExtracted ? 'IA' : 'Manuelle']),
+      ]);
+    } catch (e: any) {
+      toast({ title: 'Export impossible', description: e.message, variant: 'error' });
+    }
+  };
 
   const lines = summary?.lines ?? [];
   const total = summary?.total ?? 0;
@@ -167,20 +181,19 @@ function Content() {
           <option value="">Toutes catégories</option>
           {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </Select>
-        <span className="text-xs text-[#7a8f80]">{list.length} dépense(s) · {fmtFCFA(list.reduce((s: number, x: any) => s + Number(x.amount), 0))}</span>
-        <Button variant="secondary" size="sm" className="ml-auto" disabled={list.length === 0} onClick={() => downloadCsv(`depenses-${month}.csv`, [
-          ['Date', 'Catégorie', 'Montant', 'Description', 'Technicien', 'Véhicule', 'Source'],
-          ...list.map((x: any) => [x.expenseDate ?? '', CAT_LABEL[x.category] ?? x.category, Number(x.amount), x.description ?? '', techName(x.technicianId) ?? '', vehicleName(x.vehicleId) ?? '', x.aiExtracted ? 'IA' : 'Manuelle']),
-        ])}><Download size={14} /> CSV</Button>
+        <span className="text-xs text-[#7a8f80]">
+          {expenseCount.toLocaleString('fr-FR')} dépense(s){!categoryFilter && !q ? ` · ${fmtFCFA(total)}` : ''}
+        </span>
+        <Button variant="secondary" size="sm" className="ml-auto" disabled={expenseCount === 0} onClick={exportCsv}><Download size={14} /> CSV</Button>
       </div>
 
       {/* Table des dépenses */}
-      {loading ? (
+      {loading && !expenses ? (
         <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
       ) : list.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
           <Receipt size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
-          <p className="text-sm text-[#7a8f80]">Aucune dépense sur {month}</p>
+          <p className="text-sm text-[#7a8f80]">{categoryFilter || q ? 'Aucune dépense ne correspond aux filtres' : `Aucune dépense sur ${month}`}</p>
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-[0.625rem] border border-[#1e2e25]">
@@ -232,6 +245,8 @@ function Content() {
               ))}
             </tbody>
           </table>
+          <Pager className="border-t border-[#1e2e25] bg-[#111916]" total={expenseCount} offset={pager.offset} limit={pager.limit}
+            onChange={pager.setOffset} onLimitChange={pager.setLimit} />
         </div>
       )}
 

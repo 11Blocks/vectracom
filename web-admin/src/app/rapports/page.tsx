@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, useToast, ChartEmpty } from '@/components/ui';
 import { useQuery } from '@/hooks/use-query';
-import { reportsService } from '@/services';
+import { reportsService, dashboardService } from '@/services';
 import {
   FileText, FileDown, FileSpreadsheet, Loader2, TrendingUp, MapPin, Package, AlertTriangle,
   Target, BarChart3, ArrowRight,
@@ -21,9 +21,8 @@ function fmtNum(n: any) { return n === null || n === undefined ? '—' : Number(
 
 function monthRange(month: string) {
   const [y, m] = month.split('-').map(Number);
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 0);
-  return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { startDate: `${month}-01`, endDate: `${month}-${String(lastDay).padStart(2, '0')}` };
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -53,6 +52,9 @@ function Content() {
   const { data: olt, loading: l2 } = useQuery(() => reportsService.olt(startDate, endDate), [startDate, endDate]);
   const { data: sv, loading: l3 } = useQuery(() => reportsService.stockVehicles(startDate, endDate), [startDate, endDate]);
   const { data: inc, loading: l4 } = useQuery(() => reportsService.incidents(startDate, endDate), [startDate, endDate]);
+  const { data: last } = useQuery(() => dashboardService.summary(7), []);
+  const lastMission = [{ label: 'Dernière mission', date: last?.lastMissionDate }];
+  const lastIncident = [{ label: 'Dernier incident', date: last?.lastIncidentDate }];
 
   const [exporting, setExporting] = useState<string | null>(null);
 
@@ -140,7 +142,7 @@ function Content() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="text-xs text-[#7a8f80] py-8 text-center">Aucune mission clôturée sur la période</p>}
+            ) : <ChartEmpty className="py-8" message="Aucune mission clôturée sur la période" lastDates={lastMission} />}
             {(perf?.topFailureReasons ?? []).length > 0 && (
               <div className="mt-2 space-y-1">
                 <p className="text-[10px] text-[#7a8f80] uppercase tracking-wide">Top motifs d'échec</p>
@@ -189,7 +191,7 @@ function Content() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="text-xs text-[#7a8f80] py-8 text-center">Aucune mission sur la période</p>}
+            ) : <ChartEmpty className="py-8" message="Aucune mission sur la période" lastDates={lastMission} />}
           </Card>
 
           {/* ═══ Rapport 3 : Usage stock & véhicules ═══ */}
@@ -225,7 +227,7 @@ function Content() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="text-xs text-[#7a8f80] py-6 text-center">Aucune consommation sur la période</p>}
+            ) : <ChartEmpty className="py-6" message="Aucune consommation sur la période" />}
             {(sv?.vehicleCosts ?? []).some((v: any) => v.coutTransport > 0) && (
               <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
                 {(sv?.vehicleCosts ?? []).filter((v: any) => v.coutTransport > 0).map((v: any) => (
@@ -271,7 +273,7 @@ function Content() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="text-xs text-[#7a8f80] py-6 text-center">{inc?.note ?? 'Aucun incident sur la période'}</p>}
+            ) : <ChartEmpty className="py-6" message={inc?.note ?? 'Aucun incident sur la période'} lastDates={lastIncident} />}
           </Card>
 
           {/* ═══ Rapport 5 : KPI SONATEL (renvoi) ═══ */}

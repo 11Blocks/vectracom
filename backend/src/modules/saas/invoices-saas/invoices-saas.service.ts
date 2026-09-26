@@ -13,6 +13,7 @@ import { Company } from '../../auth/entities/company.entity';
 import { SaasService } from '../saas.service';
 import { SubscriptionService } from '../saas.service';
 import { SAAS_TVA_RATE } from '../saas-pricing';
+import { pageParams } from '../../../common/pagination';
 
 /**
  * Facturation SaaS Green-T → clients : licences actives + options actives +
@@ -118,16 +119,31 @@ export class InvoicesSaasService {
   }
 
   /** companyId null = tous les tenants (console Green-T), avec le nom du tenant. */
-  async list(companyId: string | null, filters: { status?: string }) {
-    const qb = this.invoiceRepository.createQueryBuilder('i').orderBy('i.periodStart', 'DESC');
+  async list(
+    companyId: string | null,
+    filters: { status?: string; search?: string; limit?: number; offset?: number },
+  ): Promise<[Array<InvoiceSaas & { companyName?: string | null }>, number]> {
+    const { take, skip } = pageParams(filters, 500, 2000);
+    const qb = this.invoiceRepository
+      .createQueryBuilder('i')
+      .orderBy('i.periodStart', 'DESC')
+      .addOrderBy('i.id', 'DESC')
+      .take(take)
+      .skip(skip);
     if (companyId) qb.where('i.company_id = :companyId', { companyId });
     if (filters.status) qb.andWhere('i.status = :status', { status: filters.status });
-    const invoices = await qb.getMany();
+    if (filters.search?.trim()) {
+      qb.andWhere(
+        '(i.invoice_number ILIKE :q OR i.status::text ILIKE :q OR i.company_id IN (SELECT c.id FROM companies c WHERE c.name ILIKE :q))',
+        { q: `%${filters.search.trim()}%` },
+      );
+    }
+    const [invoices, total] = await qb.getManyAndCount();
     const ids = [...new Set(invoices.map((i) => i.companyId).filter(Boolean))] as string[];
-    if (!ids.length) return invoices;
+    if (!ids.length) return [invoices, total];
     const companies = await this.companyRepository.find({ where: ids.map((id) => ({ id })), select: ['id', 'name'] });
     const names = new Map(companies.map((c) => [c.id, c.name]));
-    return invoices.map((i) => ({ ...i, companyName: names.get(i.companyId ?? '') ?? null }));
+    return [invoices.map((i) => ({ ...i, companyName: names.get(i.companyId ?? '') ?? null })), total];
   }
 
   /** Paiement : la facture passe à paid et le tenant est réactivé s'il était retard/suspendu. */

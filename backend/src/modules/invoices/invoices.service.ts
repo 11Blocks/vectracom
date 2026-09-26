@@ -35,6 +35,7 @@ import {
   UpdateInvoiceHeaderDto,
 } from './dto/invoice-lifecycle.dto';
 import { SettingsService } from '../settings/settings.service';
+import { pageParams } from '../../common/pagination';
 
 /** Statuts émis (numérotés) dont on peut enregistrer l'encaissement. */
 const PAYABLE_STATUSES: InvoiceStatus[] = ['finalisee', 'envoyee', 'partiellement_payee'];
@@ -343,8 +344,11 @@ export class InvoicesService {
 
   async list(
     companyId: string,
-    filters: { status?: string; periodStart?: string; kind?: string; clientId?: string },
-  ) {
+    filters: {
+      status?: string; periodStart?: string; kind?: string; clientId?: string;
+      search?: string; overdue?: string; limit?: number; offset?: number;
+    },
+  ): Promise<[Array<Invoice & { clientName: string | null; remaining: number; overdue: boolean }>, number]> {
     const qb = this.invoiceRepository
       .createQueryBuilder('i')
       .leftJoin(Client, 'c', 'c.id = i.client_id')
@@ -356,15 +360,51 @@ export class InvoicesService {
     if (filters.kind) qb.andWhere('i.kind = :kind', { kind: filters.kind });
     if (filters.clientId) qb.andWhere('i.client_id = :clientId', { clientId: filters.clientId });
     if (filters.periodStart) qb.andWhere('i.period_start >= :period', { period: filters.periodStart });
+    if (filters.overdue === 'true') {
+      qb.andWhere('i.due_date < :today AND i.status IN (:...payable)', { today: today(), payable: PAYABLE_STATUSES });
+    }
+    if (filters.search?.trim()) {
+      qb.andWhere("(i.invoice_number ILIKE :q OR c.name ILIKE :q OR i.client_snapshot->>'name' ILIKE :q)", {
+        q: `%${filters.search.trim()}%`,
+      });
+    }
+    const total = await qb.clone().getCount();
+    const { take, skip } = pageParams(filters, 500, 2000);
+    // Jointure 1-1 (client) : limit/offset SQL directs, sans sous-requête DISTINCT.
+    qb.limit(take).offset(skip);
     const { entities, raw } = await qb.getRawAndEntities();
     const clientNames = new Map<string, string | null>(raw.map((r: Record<string, unknown>) => [r.i_id as string, (r.c_name as string) ?? null]));
     const now = today();
-    return entities.map((i) => ({
+    const items = entities.map((i) => ({
       ...i,
       clientName: i.clientSnapshot?.name ?? clientNames.get(i.id) ?? (i.kind === 'periodique' ? DEFAULT_CLIENT_NAME : null),
       remaining: this.remaining(i),
       overdue: !!i.dueDate && i.dueDate < now && PAYABLE_STATUSES.includes(i.status),
     }));
+    return [items, total];
+  }
+
+  /** Synthèse financière et compteurs par statut (toutes factures, indépendamment de la page affichée). */
+  async summary(companyId: string, clientId?: string) {
+    const where: Record<string, unknown> = { companyId };
+    if (clientId) where.clientId = clientId;
+    const all = await this.invoiceRepository.find({
+      where,
+      select: ['id', 'kind', 'status', 'totalTtc', 'amountPaid', 'dueDate'],
+    });
+    const now = today();
+    const issued = all.filter((i) => !['brouillon', 'en_correction', 'annulee'].includes(i.status) && i.kind !== 'avoir');
+    const byStatus: Record<string, number> = {};
+    for (const i of all) byStatus[i.status] = (byStatus[i.status] ?? 0) + 1;
+    return {
+      total: all.length,
+      byStatus,
+      issuedTtc: issued.reduce((s, i) => s + Number(i.totalTtc ?? 0), 0),
+      paid: issued.reduce((s, i) => s + Number(i.amountPaid ?? 0), 0),
+      remaining: issued.reduce((s, i) => s + this.remaining(i), 0),
+      overdue: all.filter((i) => !!i.dueDate && i.dueDate < now && PAYABLE_STATUSES.includes(i.status)).length,
+      drafts: all.filter((i) => EDITABLE_INVOICE_STATUSES.includes(i.status)).length,
+    };
   }
 
   async findOne(companyId: string, id: string) {

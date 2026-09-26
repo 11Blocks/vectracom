@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { pageParams } from '../../common/pagination';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { StockMovement, MovementType } from './entities/stock-movement.entity';
 import { StockItem } from './entities/stock-item.entity';
@@ -183,13 +184,19 @@ export class StockMovementService {
 
   async list(
     companyId: string,
-    filters: { type?: string; stockItemId?: string; warehouseId?: string; missionId?: string; includeCancelled?: boolean; limit?: number },
+    filters: {
+      type?: string; stockItemId?: string; warehouseId?: string; missionId?: string;
+      includeCancelled?: boolean; limit?: number; offset?: number;
+    },
   ) {
+    const { take, skip } = pageParams(filters, 500, 2000);
     const qb = this.movementRepository
       .createQueryBuilder('m')
       .where('m.company_id = :companyId', { companyId })
       .orderBy('m.created_at', 'DESC')
-      .take(Math.min(filters.limit ?? 500, 2000));
+      .addOrderBy('m.id', 'DESC')
+      .take(take)
+      .skip(skip);
     if (filters.type) qb.andWhere('m.type = :type', { type: filters.type });
     if (filters.stockItemId) qb.andWhere('m.stock_item_id = :stockItemId', { stockItemId: filters.stockItemId });
     if (filters.missionId) qb.andWhere('m.mission_id = :missionId', { missionId: filters.missionId });
@@ -197,7 +204,7 @@ export class StockMovementService {
       qb.andWhere('(m.from_warehouse_id = :wid OR m.to_warehouse_id = :wid)', { wid: filters.warehouseId });
     }
     if (filters.includeCancelled === false) qb.andWhere('m.cancelled_at IS NULL');
-    return qb.getMany();
+    return qb.getManyAndCount();
   }
 
   /** Chaîne de traçabilité d'un ASSET : tous ses mouvements dans l'ordre. */

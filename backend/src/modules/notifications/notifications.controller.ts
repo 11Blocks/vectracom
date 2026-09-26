@@ -1,4 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { IsBooleanString, IsIn, IsObject, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -6,7 +8,7 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsCronService } from './notifications-cron.service';
 import { NOTIFICATION_CHANNELS, NOTIFICATION_TYPES } from './entities/notification.entity';
 
-class ListNotificationsQueryDto {
+class ListNotificationsQueryDto extends PageQueryDto {
   @IsOptional() @IsBooleanString() unreadOnly?: string;
 }
 
@@ -51,13 +53,18 @@ export class NotificationsController {
   ) {}
 
   @Get()
-  list(
+  async list(
     @CurrentUser('companyId') companyId: string | null,
     @CurrentUser('id') userId: string,
     @Query() query: ListNotificationsQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     this.requireTenant(companyId);
-    return this.notificationsService.list(companyId!, userId, { unreadOnly: query.unreadOnly === 'true' });
+    return withTotal(res, await this.notificationsService.list(companyId!, userId, {
+      unreadOnly: query.unreadOnly === 'true',
+      limit: query.limit,
+      offset: query.offset,
+    }));
   }
 
   @Get('unread-count')

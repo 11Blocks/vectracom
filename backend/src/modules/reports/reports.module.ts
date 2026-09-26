@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PerformanceDashboardController } from './performance-dashboard.controller';
 import { PerformanceDashboardService } from './performance-dashboard.service';
 import { ReportsController } from './reports.controller';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
 import { ReportsService } from './reports.service';
 import { PdfExporterService } from './exporters/pdf-exporter.service';
 import { ExcelExporterService } from './exporters/excel-exporter.service';
@@ -21,8 +23,8 @@ import { PdfGeneratorService } from '../../common/pdf/pdf-generator.service';
     TypeOrmModule.forFeature([Mission, MissionFieldReport, Technician, StockMovement, StockItem, Vehicle, Expense]),
     KpiSonatelModule,
   ],
-  controllers: [ReportsController, PerformanceDashboardController],
-  providers: [ReportsService, PdfExporterService, ExcelExporterService, PdfGeneratorService, PerformanceDashboardService],
+  controllers: [ReportsController, PerformanceDashboardController, DashboardController],
+  providers: [ReportsService, PdfExporterService, ExcelExporterService, PdfGeneratorService, PerformanceDashboardService, DashboardService],
   exports: [ReportsService],
 })
 export class ReportsModule {}

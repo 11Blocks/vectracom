@@ -43,8 +43,31 @@ function Content() {
   });
   const [yearAnchor, setYearAnchor] = useState(new Date().getFullYear());
 
+  // Vues calendrier : on ne charge que la plage affichée (le serveur plafonne à 2000 missions).
+  const range: { from: string; to: string } | null = (() => {
+    const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    switch (view) {
+      case 'week': return { from: ymd(weekAnchor), to: ymd(addDays(weekAnchor, 6)) };
+      case 'day': return { from: dayAnchor, to: dayAnchor };
+      case 'month': {
+        const start = mondayOf(new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1));
+        return { from: ymd(start), to: ymd(addDays(start, 41)) };
+      }
+      case 'quarter': return {
+        from: ymd(new Date(quarterAnchor.year, quarterAnchor.q * 3, 1)),
+        to: ymd(new Date(quarterAnchor.year, quarterAnchor.q * 3 + 3, 0)),
+      };
+      case 'year': return { from: `${yearAnchor}-01-01`, to: `${yearAnchor}-12-31` };
+      default: return null;
+    }
+  })();
+
   const params = new URLSearchParams();
-  if (statusFilter) params.set('status', statusFilter);
+  if (statusFilter && statusFilter !== '__SURCH__') params.set('status', statusFilter);
+  if (range) {
+    params.set('from', range.from);
+    params.set('to', range.to + 'T23:59:59');
+  }
   const qs = params.toString();
 
   const { data, loading } = useQuery(() => api.get('/planning/missions' + (qs ? '?' + qs : '')), [qs]);

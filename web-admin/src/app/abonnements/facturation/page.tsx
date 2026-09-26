@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Modal, Card, Skeleton, EmptyState, Input, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Badge, Modal, Card, Skeleton, EmptyState, Input, ConfirmDialog, useToast, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
+import { useDebounced } from '@/hooks/use-debounced';
 import { saasService } from '@/services';
 import { TenantPicker, useSessionUser } from '@/components/admin/TenantPicker';
 import { Receipt, Plus, Search, Loader2, Ban, CheckCircle, Package } from 'lucide-react';
@@ -54,15 +55,19 @@ function Content() {
   const canEdit = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'finance_admin';
   const invoiceScope = (item: any) => (isConsole ? item.companyId : undefined);
 
-  const { data: items, loading, refetch: refetchList } = useQuery(
+  const q = useDebounced(search.trim());
+  const pager = usePagination(50, `${filter}|${tenantId}|${q}`);
+  const { data: page, loading, refetch: refetchList } = useQuery(
     () => {
       if (!user) return Promise.resolve(null);
-      const params: Record<string, string> = {};
-      if (filter) params.status = filter;
-      if (isConsole && tenantId) params.companyId = tenantId;
-      return saasService.listInvoices(params);
+      return saasService.pageInvoices({
+        status: filter || undefined,
+        companyId: isConsole && tenantId ? tenantId : undefined,
+        search: q || undefined,
+        ...pager.params,
+      });
     },
-    [user?.id, filter, tenantId],
+    [user?.id, filter, tenantId, q, pager.offset, pager.limit],
   );
   const { data: summary, refetch: refetchSummary } = useQuery(
     () => user ? saasService.invoicesSummary(isConsole && tenantId ? tenantId : undefined) : Promise.resolve(null),
@@ -96,15 +101,11 @@ function Content() {
     },
   );
 
-  const allItems: any[] = Array.isArray(items) ? items : [];
-  const cancelTarget = allItems.find(i => i.id === cancelId);
+  const list: any[] = page?.items ?? [];
+  const totalCount = page?.total ?? 0;
+  const cancelTarget = list.find(i => i.id === cancelId);
   const sum = (summary ?? {}) as Record<string, { count: number; amount: number }>;
   const stat = (k: string) => sum[k] ?? { count: 0, amount: 0 };
-
-  const list = allItems.filter((item: any) => {
-    if (!search) return true;
-    return JSON.stringify(item).toLowerCase().includes(search.toLowerCase());
-  });
 
   return (
     <div className="space-y-4">
@@ -114,7 +115,7 @@ function Content() {
           <div>
             <h1 className="text-xl font-bold text-[#e8ede9]">Facturation SaaS</h1>
             <p className="text-xs text-[#7a8f80]">
-              {isConsole ? 'Console Green-T — factures de tous les clients' : 'Licences & options'} — {list.length} facture(s)
+              {isConsole ? 'Console Green-T — factures de tous les clients' : 'Licences & options'} — {totalCount.toLocaleString('fr-FR')} facture(s)
             </p>
           </div>
         </div>
@@ -165,7 +166,7 @@ function Content() {
         </select>
       </div>
 
-      {loading ? (
+      {loading && !page ? (
         <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
       ) : list.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916]">
@@ -225,6 +226,8 @@ function Content() {
               })}
             </tbody>
           </table>
+          <Pager className="border-t border-[#1e2e25] bg-[#111916]" total={totalCount} offset={pager.offset} limit={pager.limit}
+            onChange={pager.setOffset} onLimitChange={pager.setLimit} />
         </div>
       )}
 

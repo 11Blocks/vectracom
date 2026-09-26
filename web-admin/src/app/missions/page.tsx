@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast, ConfirmDialog } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast, ConfirmDialog, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
+import { useDebounced } from '@/hooks/use-debounced';
 import { missionsService, teamsService, techniciansService, vehiclesService, partnersService } from '@/services';
 import { STATUS_META, typeMeta, statusMeta } from '@/lib/mission-meta';
 import { downloadCsv } from '@/lib/csv';
@@ -30,16 +31,18 @@ function Content() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data, loading, refetch } = useQuery(
-    () => missionsService.list(statusFilter ? { status: statusFilter } : {}),
-    [statusFilter],
-  );
-  const missions = Array.isArray(data) ? data : [];
+  const q = useDebounced(search.trim());
+  const pager = usePagination(50, `${statusFilter}|${q}`);
 
-  const list = missions.filter(m =>
-    !search || `${m.clientSite} ${m.typeTache} ${m.sonatelDossierNumber ?? ''} ${m.zone ?? ''}`
-      .toLowerCase().includes(search.toLowerCase())
+  const { data, loading, refetch: refetchPage } = useQuery(
+    () => missionsService.page({ status: statusFilter || undefined, search: q || undefined, ...pager.params }),
+    [statusFilter, q, pager.offset, pager.limit],
   );
+  const { data: counts, refetch: refetchCounts } = useQuery(() => missionsService.statusCounts(q || undefined), [q]);
+  const refetch = async () => { await Promise.all([refetchPage(), refetchCounts()]); };
+  const list: any[] = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const allCount = Object.values(counts ?? {}).reduce((n, c) => n + c, 0);
 
   const [reassignTarget, setReassignTarget] = useState<any>(null);
   const [editTarget, setEditTarget] = useState<any>(null);
@@ -51,7 +54,7 @@ function Content() {
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   const [confirmBulkValidate, setConfirmBulkValidate] = useState(false);
 
-  useEffect(() => { setSelected(new Set()); }, [statusFilter]);
+  useEffect(() => { setSelected(new Set()); }, [statusFilter, q, pager.offset, pager.limit]);
 
   const closeReason = () => { setReasonTarget(null); setReason(''); };
 
@@ -85,10 +88,21 @@ function Content() {
   });
   const toggleAll = () => setSelected(allVisibleSelected ? new Set() : new Set(list.map(m => m.id)));
 
-  const exportCsv = () => {
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    setExporting(true);
+    let all: any[];
+    try {
+      all = (await missionsService.page({ status: statusFilter || undefined, search: q || undefined, limit: '5000' })).items;
+    } catch (e: any) {
+      toast({ title: 'Export impossible', description: e.message, variant: 'error' });
+      return;
+    } finally {
+      setExporting(false);
+    }
     const rows: (string | number | null | undefined)[][] = [
       ['Dossier', 'Client / Site', 'Type', 'Zone', 'SR/Plaque', 'Date', 'Équipe', 'Statut', 'Facturée', 'Motif'],
-      ...list.map(m => [
+      ...all.map(m => [
         m.sonatelDossierNumber, m.clientSite, m.typeTache, m.zone, m.srPlaque,
         m.dateMission ? String(m.dateMission).slice(0, 10) : '',
         m.importMeta?.teamLabel ?? m.team?.name, statusMeta(m.status).label,
@@ -122,11 +136,13 @@ function Content() {
           <span className="p-2 rounded-lg bg-[#0f9d70]/10 text-[#0f9d70]"><ClipboardCheck size={20} /></span>
           <div>
             <h1 className="text-xl font-bold text-[#e8ede9]">Missions</h1>
-            <p className="text-xs text-[#7a8f80]">{missions.length} mission(s) — cliquez une ligne pour le formulaire terrain</p>
+            <p className="text-xs text-[#7a8f80]">{total.toLocaleString('fr-FR')} mission(s) — cliquez une ligne pour le formulaire terrain</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportCsv} disabled={!list.length}><Download size={15} /> Export CSV</Button>
+          <Button variant="outline" onClick={exportCsv} disabled={!total || exporting}>
+            {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Export CSV
+          </Button>
           <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Créer une mission</Button>
         </div>
       </div>
@@ -135,10 +151,10 @@ function Content() {
       <div className="flex flex-wrap gap-1.5">
         <button onClick={() => setStatusFilter('')}
           className={'rounded-lg border px-3 py-1.5 text-sm transition-colors ' + (!statusFilter ? 'border-[#0f9d70] bg-[#0f9d70]/10 text-[#0f9d70]' : 'border-[#1e2e25] text-[#7a8f80] hover:text-[#e8ede9]')}>
-          Tous
+          Tous {allCount > 0 && <span className="text-xs opacity-70">({allCount})</span>}
         </button>
         {Object.entries(STATUS_META).map(([k, m]) => {
-          const count = missions.filter(x => x.status === k).length;
+          const count = counts?.[k] ?? 0;
           if (!count && statusFilter !== k) return null;
           return (
             <button key={k} onClick={() => setStatusFilter(statusFilter === k ? '' : k)}
@@ -178,13 +194,19 @@ function Content() {
         </div>
       )}
 
-      {loading ? (
+      {loading && !data ? (
         <div className="space-y-2">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
       ) : list.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
           <ClipboardCheck size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
-          <p className="text-sm text-[#7a8f80] mb-4">Aucune mission — importez le planning SONATEL ou créez-en une</p>
-          <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Créer une mission</Button>
+          {q || statusFilter ? (
+            <p className="text-sm text-[#7a8f80]">Aucune mission ne correspond aux filtres.</p>
+          ) : (
+            <>
+              <p className="text-sm text-[#7a8f80] mb-4">Aucune mission — importez le planning SONATEL ou créez-en une</p>
+              <Button onClick={() => setShowCreate(true)}><Plus size={15} /> Créer une mission</Button>
+            </>
+          )}
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-[0.625rem] border border-[#1e2e25]">
@@ -289,6 +311,8 @@ function Content() {
               })}
             </tbody>
           </table>
+          <Pager className="border-t border-[#1e2e25] bg-[#111916]" total={total} offset={pager.offset} limit={pager.limit}
+            onChange={pager.setOffset} onLimitChange={pager.setLimit} />
         </div>
       )}
 

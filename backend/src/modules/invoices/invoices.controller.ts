@@ -15,6 +15,7 @@ import type { Response } from 'express';
 import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { InvoicesService } from './invoices.service';
 import { GenerateInvoiceDto } from './dto/generate-invoice.dto';
 import { CorrectInvoiceDto } from './dto/correct-invoice.dto';
@@ -29,7 +30,15 @@ import {
 } from './dto/invoice-lifecycle.dto';
 import { INVOICE_KINDS, INVOICE_STATUSES } from './entities/invoice.entity';
 
-class ListInvoicesQueryDto {
+class ListInvoicesQueryDto extends PageQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  overdue?: string;
+
   @IsOptional()
   @IsString()
   @IsIn(INVOICE_STATUSES as unknown as string[])
@@ -58,9 +67,19 @@ export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
   @Get()
-  list(@CurrentUser('companyId') companyId: string | null, @Query() query: ListInvoicesQueryDto) {
+  async list(
+    @CurrentUser('companyId') companyId: string | null,
+    @Query() query: ListInvoicesQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     requireTenant(companyId);
-    return this.invoicesService.list(companyId!, query);
+    return withTotal(res, await this.invoicesService.list(companyId!, query));
+  }
+
+  @Get('summary')
+  summary(@CurrentUser('companyId') companyId: string | null, @Query('clientId') clientId?: string) {
+    requireTenant(companyId);
+    return this.invoicesService.summary(companyId!, clientId || undefined);
   }
 
   /** Génération à partir des missions validées non facturées de la période. */

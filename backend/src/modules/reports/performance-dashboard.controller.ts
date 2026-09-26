@@ -47,6 +47,13 @@ export class PerformanceDashboardController {
     return this.perf.trend(companyId!, weeks ? Math.min(26, Math.max(2, Number(weeks) || 5)) : 5);
   }
 
+  /** Dernière semaine ISO avec des missions (période par défaut de l'écran). */
+  @Get('latest')
+  async latest(@CurrentUser('companyId') companyId: string | null) {
+    this.requireTenant(companyId);
+    return (await this.perf.latestWeek(companyId!)) ?? { week: null, year: null, from: null, to: null, last: null };
+  }
+
   /** Interprétation IA (ambre) — propose, ne décide jamais. */
   @Get('interpret')
   interpret(

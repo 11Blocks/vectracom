@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, useToast, ChartEmpty } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { performanceService } from '@/services';
 import {
@@ -13,14 +13,15 @@ import {
   ComposedChart, Line, CartesianGrid,
 } from 'recharts';
 
-function currentIsoWeek(): number {
-  const d = new Date();
+function isoWeekOf(d: Date): { week: number; year: number } {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return { week: Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7), year: date.getUTCFullYear() };
 }
+
+const isoDay = (offsetDays = 0) => new Date(Date.now() + offsetDays * 86400000).toISOString().slice(0, 10);
 
 export default function Page() {
   return <AppShell><Content /></AppShell>;
@@ -30,23 +31,41 @@ function Content() {
   const { toast } = useToast();
   const [tab, setTab] = useState<'equipes' | 'olt' | 'motifs' | 'taches'>('equipes');
   const [mode, setMode] = useState<'week' | 'range'>('week');
-  const [week, setWeek] = useState(30); // défaut S30 (dernier fichier reçu)
-  const [year, setYear] = useState(2026);
-  const [from, setFrom] = useState('2026-07-20');
-  const [to, setTo] = useState('2026-07-26');
+  const current = isoWeekOf(new Date());
+  const [week, setWeek] = useState(current.week);
+  const [year, setYear] = useState(current.year);
+  const [from, setFrom] = useState(isoDay(-6));
+  const [to, setTo] = useState(isoDay());
+  const [ready, setReady] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Période par défaut : dernière semaine ISO contenant des missions (sinon semaine courante).
+  const { data: latest, error: latestError } = useQuery(() => performanceService.latest(), []);
+  useEffect(() => {
+    if (ready) return;
+    if (latestError) { setReady(true); return; }
+    if (!latest) return;
+    if (latest.week && latest.year) {
+      setWeek(latest.week);
+      setYear(latest.year);
+    }
+    setReady(true);
+  }, [latest, latestError, ready]);
 
   const queryOpts = mode === 'week' ? { week, year } : { from, to };
 
   const { data: dash, loading, refetch } = useQuery(
     () => performanceService.dashboard(queryOpts),
-    [mode, week, year, from, to],
+    [mode, week, year, from, to, ready],
+    { immediate: ready },
   );
-  const { data: trend } = useQuery(() => performanceService.trend(6), []);
+  const { data: trend } = useQuery(() => performanceService.trend(8), []);
   const { data: interpret } = useQuery(
     () => performanceService.interpret(queryOpts),
-    [mode, week, year, from, to],
+    [mode, week, year, from, to, ready],
+    { immediate: ready },
   );
+  const trendHasData = (trend?.weeks ?? []).some((w: any) => w.cas > 0);
 
   const importMut = useMutation((file: File) => performanceService.importDaily(file), {
     onSuccess: (res: any) => {
@@ -105,7 +124,8 @@ function Content() {
     [olts],
   );
 
-  const weekPresets = [27, 28, 29, 30, currentIsoWeek()].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  const weekPresets = Array.from(new Set([latest?.week, current.week].filter((w): w is number => !!w))).sort((a, b) => a - b);
+  const lastDataDate = [{ label: 'Dernière mission', date: latest?.last }];
 
   return (
     <div className="space-y-5">
@@ -195,27 +215,35 @@ function Content() {
         </Card>
       )}
 
-      {trend?.weeks?.length > 0 && (
+      {trend?.weeks && (
         <Card className="border-[#1e2e25] bg-[#111916] p-4">
           <h3 className="text-sm font-semibold text-[#e8ede9] mb-3 flex items-center gap-2">
-            <TrendingUp size={15} className="text-[#0f9d70]" /> Tendance hebdomadaire (taux OK %)
+            <TrendingUp size={15} className="text-[#0f9d70]" /> Tendance hebdomadaire (taux OK %) — {trend.weeks.length} dernières semaines
           </h3>
           <div className="h-48">
+            {!trendHasData ? (
+              <ChartEmpty className="h-full" message={`Aucune mission sur les ${trend.weeks.length} dernières semaines`} lastDates={lastDataDate} />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trend.weeks}>
                 <XAxis dataKey="week" stroke="#7a8f80" fontSize={11} />
                 <YAxis stroke="#7a8f80" fontSize={11} domain={[0, 100]} />
                 <Tooltip
                   contentStyle={{ background: '#0a0f0d', border: '1px solid #1e2e25', borderRadius: 8, fontSize: 12 }}
+                  labelFormatter={(_, payload) => {
+                    const p = payload?.[0]?.payload;
+                    return p ? `${p.week} ${p.year} — ${p.cas} cas` : '';
+                  }}
                   formatter={(v: any, name: any) => [name === 'taux' ? `${v} %` : v, name === 'taux' ? 'Taux OK' : name]}
                 />
                 <Bar dataKey="taux" radius={[4, 4, 0, 0]}>
                   {(trend.weeks as any[]).map((w, i) => (
-                    <Cell key={i} fill={w.taux >= 60 ? '#0f9d70' : w.taux >= 45 ? '#f5a623' : '#C0392B'} />
+                    <Cell key={i} fill={w.cas === 0 ? '#1e2e25' : w.taux >= 60 ? '#0f9d70' : w.taux >= 45 ? '#f5a623' : '#C0392B'} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </Card>
       )}
@@ -234,14 +262,14 @@ function Content() {
         ))}
       </div>
 
-      {loading ? <Skeleton className="h-64" /> : tab === 'equipes' ? (
+      {loading || !ready ? <Skeleton className="h-64" /> : tab === 'equipes' ? (
         <div className="grid lg:grid-cols-2 gap-4">
           <Card className="border-[#1e2e25] bg-[#111916] overflow-hidden">
             <div className="px-4 py-2.5 text-xs font-semibold text-[#7a8f80] bg-[#0a0f0d] grid grid-cols-[2fr_4rem_4rem_4rem_5rem] gap-2">
               <span>Équipe</span><span className="text-right">Cas</span><span className="text-right">OK</span><span className="text-right">NOK</span><span className="text-right">Taux</span>
             </div>
             <div className="divide-y divide-[#1e2e25]/50 max-h-[480px] overflow-y-auto">
-              {teams.length === 0 && <p className="p-6 text-center text-xs text-[#7a8f80]/70">Aucune donnée — importez un Dashboard_Performance (feuille DAILY).</p>}
+              {teams.length === 0 && <ChartEmpty className="p-6" message="Aucune mission sur la période — choisissez une autre semaine ou importez un DAILY." lastDates={lastDataDate} />}
               {teams.map((t: any) => (
                 <div key={t.equipe} className="px-4 py-2.5 grid grid-cols-[2fr_4rem_4rem_4rem_5rem] gap-2 items-center hover:bg-[#172019] transition-colors">
                   <span className="text-sm text-[#e8ede9] truncate">{t.equipe}</span>
@@ -262,7 +290,7 @@ function Content() {
             <h3 className="text-sm font-semibold text-[#C0392B] mb-3">Évolutions installations par équipe</h3>
             <div className="h-[420px]">
               {teamChart.length === 0 ? (
-                <p className="text-xs text-[#7a8f80]/70 text-center pt-20">Pas de données.</p>
+                <ChartEmpty className="h-full" lastDates={lastDataDate} />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={teamChart} margin={{ left: 0, right: 8, top: 8, bottom: 60 }}>
@@ -290,7 +318,7 @@ function Content() {
               <span>OLT</span><span className="text-right">Cas</span><span className="text-right">OK</span><span className="text-right">NOK</span><span className="text-right">Taux</span>
             </div>
             <div className="divide-y divide-[#1e2e25]/50 max-h-[480px] overflow-y-auto">
-              {olts.length === 0 && <p className="p-6 text-center text-xs text-[#7a8f80]/70">Aucune donnée.</p>}
+              {olts.length === 0 && <ChartEmpty className="p-6" lastDates={lastDataDate} />}
               {olts.map((o: any) => (
                 <div key={o.olt} className="px-4 py-2.5 grid grid-cols-[2fr_4rem_4rem_4rem_5rem] gap-2 items-center hover:bg-[#172019] transition-colors">
                   <span className="text-sm text-[#e8ede9]">{o.olt}</span>
@@ -308,18 +336,24 @@ function Content() {
             <h3 className="text-sm font-semibold text-[#C0392B] mb-3">DASHBOARD PAR OLT</h3>
             <div className="h-[420px]">
               {oltChart.length === 0 ? (
-                <p className="text-xs text-[#7a8f80]/70 text-center pt-20">Pas de données.</p>
+                <ChartEmpty className="h-full" lastDates={lastDataDate} />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={oltChart} layout="vertical" margin={{ left: 16, right: 8, top: 8, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e2e25" />
-                    <XAxis type="number" stroke="#7a8f80" fontSize={10} />
+                    <XAxis type="number" stroke="#7a8f80" fontSize={10} allowDecimals={false} />
                     <YAxis type="category" dataKey="name" stroke="#7a8f80" fontSize={11} width={90} />
-                    <Tooltip contentStyle={{ background: '#0a0f0d', border: '1px solid #1e2e25', borderRadius: 8, fontSize: 11 }} />
+                    <Tooltip
+                      contentStyle={{ background: '#0a0f0d', border: '1px solid #1e2e25', borderRadius: 8, fontSize: 11 }}
+                      labelFormatter={(label, payload) => {
+                        const p = payload?.[0]?.payload;
+                        return p ? `${label} — ${p.cas} cas · ${p.taux} % OK` : label;
+                      }}
+                    />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="cas" name="Cas" stackId="a" fill="#3b82f6" />
-                    <Bar dataKey="ok" name="OK" stackId="a" fill="#f97316" />
-                    <Bar dataKey="nok" name="NOK" stackId="a" fill="#94a3b8" />
+                    {/* Cas = OK + NOK : on n'empile que les deux composantes (longueur de barre = cas). */}
+                    <Bar dataKey="ok" name="OK" stackId="a" fill="#0f9d70" />
+                    <Bar dataKey="nok" name="NOK" stackId="a" fill="#C0392B" radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -332,7 +366,7 @@ function Content() {
             Libellés COMMENTAIRES Excel (SATURATION PBO, ZONE CLIENT NON FIBREE…)
           </div>
           <div className="divide-y divide-[#1e2e25]/50">
-            {motifs.length === 0 && <p className="p-6 text-center text-xs text-[#7a8f80]/70">Aucun NOK sur la période.</p>}
+            {motifs.length === 0 && <ChartEmpty className="p-6" message={summary.totalCas > 0 ? 'Aucun NOK sur la période.' : 'Aucune mission sur la période'} lastDates={summary.totalCas > 0 ? [] : lastDataDate} />}
             {motifs.map((m: any) => {
               const max = motifs[0]?.count ?? 1;
               return (

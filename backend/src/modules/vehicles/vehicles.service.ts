@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { pageParams } from '../../common/pagination';
 import { Vehicle, VehicleStatus } from './entities/vehicle.entity';
 import { VehicleCheck } from './entities/vehicle-check.entity';
 import { VehicleDocument, VehicleDocType } from './entities/vehicle-document.entity';
@@ -238,11 +239,16 @@ export class VehiclesService {
     );
   }
 
-  async listChecks(companyId: string, vehicleId: string): Promise<VehicleCheck[]> {
+  async listChecks(
+    companyId: string,
+    vehicleId: string,
+    page: { limit?: number; offset?: number } = {},
+  ): Promise<[VehicleCheck[], number]> {
     await this.findOne(companyId, vehicleId);
-    return this.checkRepository.find({
+    return this.checkRepository.findAndCount({
       where: { companyId, vehicleId },
       order: { createdAt: 'DESC' },
+      ...pageParams(page, 200),
     });
   }
 
@@ -313,11 +319,16 @@ export class VehiclesService {
     return event;
   }
 
-  async listEvents(companyId: string, vehicleId: string, type?: string): Promise<VehicleEvent[]> {
+  async listEvents(
+    companyId: string,
+    vehicleId: string,
+    type?: string,
+    page: { limit?: number; offset?: number } = {},
+  ): Promise<[VehicleEvent[], number]> {
     await this.findOne(companyId, vehicleId);
     const where: Record<string, unknown> = { companyId, vehicleId };
     if (type) where.type = type;
-    return this.eventRepository.find({ where, order: { eventDate: 'DESC' } });
+    return this.eventRepository.findAndCount({ where, order: { eventDate: 'DESC', createdAt: 'DESC' }, ...pageParams(page, 200) });
   }
 
   async updateEventStatus(companyId: string, vehicleId: string, eventId: string, dto: UpdateVehicleEventDto): Promise<VehicleEvent> {

@@ -1,12 +1,14 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { IsDateString, IsIn, IsOptional, IsString, IsUUID, Matches } from 'class-validator';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccountingService } from './accounting.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { EXPENSE_CATEGORIES } from './entities/expense.entity';
 
-class ListExpensesQueryDto {
+class ListExpensesQueryDto extends PageQueryDto {
   @IsOptional() @IsString() @IsIn(EXPENSE_CATEGORIES as unknown as string[]) category?: string;
   @IsOptional() @IsUUID() vehicleId?: string;
   @IsOptional() @IsUUID() technicianId?: string;
@@ -14,6 +16,7 @@ class ListExpensesQueryDto {
   @IsOptional() @Matches(/^\d{4}-(0[1-9]|1[0-2])$/) month?: string;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+  @IsOptional() @IsString() search?: string;
 }
 
 class SummaryQueryDto {
@@ -28,9 +31,13 @@ export class AccountingController {
   constructor(private readonly accountingService: AccountingService) {}
 
   @Get()
-  list(@CurrentUser('companyId') companyId: string | null, @Query() query: ListExpensesQueryDto) {
+  async list(
+    @CurrentUser('companyId') companyId: string | null,
+    @Query() query: ListExpensesQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     this.requireTenant(companyId);
-    return this.accountingService.list(companyId!, query);
+    return withTotal(res, await this.accountingService.list(companyId!, query));
   }
 
   @Get('summary')

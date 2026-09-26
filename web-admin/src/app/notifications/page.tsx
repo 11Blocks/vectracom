@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Input, useToast, Tabs } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Input, useToast, Tabs, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { notificationsService } from '@/services';
 import {
@@ -51,12 +51,16 @@ function Content() {
   const [tab, setTab] = useState('liste');
   const [unreadOnly, setUnreadOnly] = useState(false);
 
-  const { data, loading, refetch } = useQuery(
-    () => notificationsService.list(unreadOnly ? { unreadOnly: 'true' } : undefined),
-    [unreadOnly],
+  const pager = usePagination(50, String(unreadOnly));
+  const { data, loading, refetch: refetchList } = useQuery(
+    () => notificationsService.page({ unreadOnly: unreadOnly ? 'true' : undefined, ...pager.params }),
+    [unreadOnly, pager.offset, pager.limit],
   );
+  const { data: unreadData, refetch: refetchUnread } = useQuery(() => notificationsService.unreadCount(), []);
+  const refetch = () => { refetchList(); refetchUnread(); };
   const { data: settings, refetch: refetchSettings } = useQuery(() => notificationsService.getSettings(), []);
-  const notifications = Array.isArray(data) ? data : [];
+  const notifications: any[] = data?.items ?? [];
+  const totalCount = data?.total ?? 0;
 
   const markAllMut = useMutation(() => notificationsService.markAllAsRead(), {
     onSuccess: () => { toast({ title: 'Tout marqué comme lu', variant: 'success' }); refetch(); },
@@ -75,7 +79,7 @@ function Content() {
     onError: (e: any) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
   });
 
-  const unread = notifications.filter(n => !n.readAt).length;
+  const unread = Number((unreadData as any)?.count ?? 0);
 
   return (
     <div className="space-y-4">
@@ -93,7 +97,7 @@ function Content() {
       </div>
 
       <Tabs
-        tabs={[{ value: 'liste', label: 'Liste', count: notifications.length }, { value: 'settings', label: 'Paramètres' }]}
+        tabs={[{ value: 'liste', label: 'Liste', count: totalCount }, { value: 'settings', label: 'Paramètres' }]}
         active={tab}
         onChange={setTab}
       />
@@ -104,7 +108,7 @@ function Content() {
             className={'rounded-lg border px-3 py-1.5 text-sm transition-colors ' + (unreadOnly ? 'border-[#0f9d70] bg-[#0f9d70]/10 text-[#0f9d70]' : 'border-[#1e2e25] text-[#7a8f80] hover:text-[#e8ede9]')}>
             {unreadOnly ? 'Non lues uniquement' : 'Toutes'}
           </button>
-          {loading ? (
+          {loading && !data ? (
             <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
           ) : notifications.length === 0 ? (
             <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
@@ -139,6 +143,8 @@ function Content() {
                   </Card>
                 );
               })}
+              <Pager total={totalCount} offset={pager.offset} limit={pager.limit}
+                onChange={pager.setOffset} onLimitChange={pager.setLimit} />
             </div>
           )}
         </>

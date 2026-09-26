@@ -7,7 +7,7 @@ import { YoloService } from './yolo.service';
 import { GeminiVisionService } from './gemini-vision.service';
 import { ActiveLearningService } from './active-learning.service';
 import { AnalyzeImageDto } from './dto/analyze-image.dto';
-import { severityFromClients } from '../incidents/incidents.service';
+import { nextIncidentNumber, severityFromClients } from '../incidents/incidents.service';
 
 /** Type de mission suggéré selon la rubrique détectée. */
 const RUBRIQUE_TO_MISSION: Record<string, string> = {
@@ -54,12 +54,10 @@ export class IaVisionService {
       if (!existing) throw new NotFoundException('Incident à compléter introuvable');
       incident = existing;
     } else {
-      const count = await this.incidentRepository.count({ where: { companyId } });
-      const year = new Date().getUTCFullYear();
       incident = await this.incidentRepository.save(
         this.incidentRepository.create({
           companyId,
-          incidentNumber: `INC-${year}-${String(count + 1).padStart(4, '0')}`,
+          incidentNumber: await nextIncidentNumber(this.incidentRepository, companyId),
           source: 'WHATSAPP',
           reportedBy,
           rubrique: (rubrique ?? 'PBO') as Incident['rubrique'],

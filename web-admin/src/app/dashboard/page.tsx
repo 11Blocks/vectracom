@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Badge, Card, Skeleton, EmptyState, StatCard, AiBlock } from '@/components/ui';
+import { Badge, Card, Skeleton, EmptyState, StatCard, AiBlock, ChartEmpty } from '@/components/ui';
 import { useQuery } from '@/hooks/use-query';
-import { missionsService, incidentsService, kpiService, stockService, vehiclesService, accountingService } from '@/services';
+import { missionsService, dashboardService, kpiService, stockService, vehiclesService, accountingService } from '@/services';
 import {
   ClipboardCheck, AlertTriangle, Clock, Package, Truck, ShieldAlert, Receipt,
   Sparkles, CheckCircle, XCircle, ArrowRight, CalendarDays, Plus, FileBarChart, BarChart3,
@@ -22,24 +22,23 @@ export default function Page() {
 function Content() {
   const router = useRouter();
   const period = new Date().toISOString().slice(0, 7);
-  const today = new Date().toISOString().slice(0, 10);
-
-  const { data: missions, loading: lm } = useQuery(() => missionsService.list({}), [], { pollingMs: 60000 });
-  const { data: incidents } = useQuery(() => incidentsService.list({}), []);
+  const [days, setDays] = useState<7 | 14 | 30>(7);
+  const { data: summary, loading: ls } = useQuery(() => dashboardService.summary(days), [days], { pollingMs: 60000 });
+  const { data: missions } = useQuery(() => missionsService.list({ limit: '10' }), [], { pollingMs: 60000 });
   const { data: kpi } = useQuery(() => kpiService.dashboard(period), [period]);
   const { data: lowStock } = useQuery(() => stockService.lowStock(), []);
   const { data: vehicles } = useQuery(() => vehiclesService.list(), []);
   const { data: monthSummary } = useQuery(() => accountingService.summary(period), [period]);
 
   const missionList = Array.isArray(missions) ? missions : [];
-  const incidentList = Array.isArray(incidents) ? incidents : [];
   const lowStockCount = Array.isArray(lowStock) ? lowStock.length : 0;
   const vehiclesList = Array.isArray(vehicles) ? vehicles : [];
 
-  const todayM = missionList.filter(m => (m.dateMission || '').slice(0, 10) === today);
-  const lateM = missionList.filter(m => m.status === 'planifiee' && (m.dateMission || '') < today);
-  const pendingVal = missionList.filter(m => m.status === 'terminee');
-  const criticalInc = incidentList.filter(i => i.severity === 'CRITICAL' || i.severity === 'MAJEUR');
+  const todayCount = summary?.kpis.todayMissions ?? 0;
+  const lateCount = summary?.kpis.lateMissions ?? 0;
+  const pendingCount = summary?.kpis.pendingValidation ?? 0;
+  const criticalCount = summary?.kpis.openCriticalIncidents;
+  const showIncidents = criticalCount !== null && criticalCount !== undefined;
 
   // Véhicules à contrôler : assurance ou visite technique expire sous 30 jours
   const in30d = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
@@ -48,31 +47,28 @@ function Content() {
     (v.technicalInspectionExpiration && v.technicalInspectionExpiration <= in30d),
   ).length;
 
-  // Activité 7 jours (missions planifiées/exécutées + incidents signalés)
-  const activity = [...Array(7)].map((_, i) => {
-    const d = new Date(Date.now() - (6 - i) * 86400000);
-    const key = d.toISOString().slice(0, 10);
-    return {
-      jour: d.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' }),
-      Missions: missionList.filter(m => (m.dateMission || '').slice(0, 10) === key).length,
-      Incidents: incidentList.filter(x => (x.reportedAt || '').slice(0, 10) === key).length,
-    };
-  });
+  // Activité N jours (missions datées du jour + incidents signalés), agrégée côté serveur
+  const activity = (summary?.activity ?? []).map(a => ({
+    jour: new Date(a.day + 'T12:00:00Z').toLocaleDateString('fr-FR', days === 7 ? { weekday: 'short', day: '2-digit' } : { day: '2-digit', month: '2-digit' }),
+    Missions: a.missions,
+    Incidents: a.incidents ?? 0,
+  }));
+  const activityEmpty = activity.every(a => a.Missions === 0 && a.Incidents === 0);
 
   const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '';
   const fmtFCFA = (n: any) => n !== null && n !== undefined ? Number(n).toLocaleString('fr-FR') + ' FCFA' : '—';
 
   const kpiCards = [
-    { label: 'Missions du jour', value: todayM.length, icon: <ClipboardCheck size={18} />, variant: 'success' as const, onClick: () => router.push('/missions') },
-    { label: 'En retard', value: lateM.length, icon: <AlertTriangle size={18} />, variant: (lateM.length > 0 ? 'danger' : 'default') as any, onClick: () => router.push('/missions') },
-    { label: 'En attente validation', value: pendingVal.length, icon: <Clock size={18} />, variant: (pendingVal.length > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/missions') },
+    { label: 'Missions du jour', value: todayCount, icon: <ClipboardCheck size={18} />, variant: 'success' as const, onClick: () => router.push('/missions') },
+    { label: 'En retard', value: lateCount, icon: <AlertTriangle size={18} />, variant: (lateCount > 0 ? 'danger' : 'default') as any, onClick: () => router.push('/missions') },
+    { label: 'En attente validation', value: pendingCount, icon: <Clock size={18} />, variant: (pendingCount > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/missions') },
     { label: 'Stock faible', value: lowStockCount, icon: <Package size={18} />, variant: (lowStockCount > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/stock') },
     { label: 'Véhicules à contrôler', value: vehiclesToCheck, icon: <Truck size={18} />, variant: (vehiclesToCheck > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/vehicles') },
-    { label: 'Incidents critiques', value: criticalInc.length, icon: <ShieldAlert size={18} />, variant: (criticalInc.length > 0 ? 'danger' : 'default') as any, onClick: () => router.push('/incidents') },
+    ...(showIncidents ? [{ label: 'Incidents critiques ouverts', value: criticalCount, icon: <ShieldAlert size={18} />, variant: (criticalCount > 0 ? 'danger' : 'default') as any, onClick: () => router.push('/incidents') }] : []),
     { label: 'Dépenses du mois', value: monthSummary ? fmtFCFA(monthSummary.total).replace(' FCFA', '') : '—', icon: <Receipt size={18} />, variant: 'default' as const, onClick: () => router.push('/comptabilite') },
   ];
 
-  if (lm) return (
+  if (ls && !summary) return (
     <div className="space-y-4">
       <Skeleton className="h-10 w-64" />
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -101,14 +97,39 @@ function Content() {
       <Card className="border-[#1e2e25] bg-[#111916] p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-[#e8ede9] flex items-center gap-2">
-            <BarChart3 size={16} className="text-[#0f9d70]" /> Activité — 7 derniers jours
+            <BarChart3 size={16} className="text-[#0f9d70]" /> Activité — {days} derniers jours
           </h3>
           <div className="flex items-center gap-4 text-xs text-[#7a8f80]">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#0f9d70]" /> Missions</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#f5a623]" /> Incidents</span>
+            {showIncidents && <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#f5a623]" /> Incidents</span>}
+            <div className="flex rounded-md border border-[#1e2e25] overflow-hidden">
+              {([7, 14, 30] as const).map(n => (
+                <button
+                  key={n}
+                  onClick={() => setDays(n)}
+                  className={`px-2 py-1 ${days === n ? 'bg-[#0f9d70]/20 text-[#0f9d70]' : 'hover:bg-white/[0.04]'}`}
+                >{n} j</button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="h-56">
+          {activityEmpty ? (
+            <ChartEmpty
+              className="h-full"
+              message={`Aucune mission ni incident sur les ${days} derniers jours`}
+              lastDates={[
+                { label: 'Dernière mission', date: summary?.lastMissionDate },
+                ...(showIncidents ? [{ label: 'Dernier incident', date: summary?.lastIncidentDate }] : []),
+              ]}
+              action={
+                <div className="flex gap-3 text-xs">
+                  <Link href="/missions" className="text-[#0f9d70] hover:underline">Missions →</Link>
+                  {showIncidents && <Link href="/incidents" className="text-[#0f9d70] hover:underline">Incidents →</Link>}
+                </div>
+              }
+            />
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={activity} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e2e25" vertical={false} />
@@ -121,30 +142,31 @@ function Content() {
                 itemStyle={{ color: '#e8ede9' }}
               />
               <Bar dataKey="Missions" fill="#0f9d70" radius={[3, 3, 0, 0]} maxBarSize={28} />
-              <Bar dataKey="Incidents" fill="#f5a623" radius={[3, 3, 0, 0]} maxBarSize={28} />
+              {showIncidents && <Bar dataKey="Incidents" fill="#f5a623" radius={[3, 3, 0, 0]} maxBarSize={28} />}
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
       </Card>
 
       {/* Recommandations IA (ambre) */}
-      {(pendingVal.length > 0 || lateM.length > 0 || (kpi && kpi.nonAtteints > 0)) && (
+      {(pendingCount > 0 || lateCount > 0 || (kpi && kpi.nonAtteints > 0)) && (
         <AiBlock title="Recommandations IA">
           <div className="space-y-2">
-            {pendingVal.length > 0 && (
+            {pendingCount > 0 && (
               <div className="flex items-center justify-between bg-[#111916]/80 border border-[#f5a623]/25 rounded-lg p-3">
                 <p className="text-sm text-[#e8ede9]">
-                  <strong>{pendingVal.length}</strong> mission(s) terminée(s) en attente de validation
+                  <strong>{pendingCount}</strong> mission(s) terminée(s) en attente de validation
                 </p>
                 <div className="flex gap-2">
                   <Link href="/missions"><button className="px-3 py-1.5 text-xs rounded-md bg-[#f5a623] text-[#0a0f0d] font-medium hover:bg-[#d9911f]">Appliquer</button></Link>
                 </div>
               </div>
             )}
-            {lateM.length > 0 && (
+            {lateCount > 0 && (
               <div className="flex items-center justify-between bg-[#111916]/80 border border-[#f5a623]/25 rounded-lg p-3">
                 <p className="text-sm text-[#e8ede9]">
-                  <strong>{lateM.length}</strong> mission(s) en retard — vérifier les affectations
+                  <strong>{lateCount}</strong> mission(s) en retard — vérifier les affectations
                 </p>
                 <Link href="/missions"><button className="px-3 py-1.5 text-xs rounded-md bg-[#f5a623] text-[#0a0f0d] font-medium hover:bg-[#d9911f]">Voir</button></Link>
               </div>

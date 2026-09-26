@@ -1,4 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -52,15 +54,23 @@ class PeriodQueryDto {
   @IsOptional() @Matches(MONTH, { message: 'Format de mois attendu : YYYY-MM' }) period?: string;
 }
 
+class ListEntriesQueryDto extends PageQueryDto {
+  @IsOptional() @Matches(MONTH, { message: 'Format de mois attendu : YYYY-MM' }) period?: string;
+}
+
 @Controller('cash-box')
 @Roles(UserRole.ADMIN, UserRole.DIRECTION)
 export class CashBoxController {
   constructor(private readonly cashBox: CashBoxService) {}
 
   @Get()
-  list(@CurrentUser('companyId') companyId: string | null, @Query() q: PeriodQueryDto) {
+  async list(
+    @CurrentUser('companyId') companyId: string | null,
+    @Query() q: ListEntriesQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     this.requireTenant(companyId);
-    return this.cashBox.list(companyId!, q.period);
+    return withTotal(res, await this.cashBox.list(companyId!, q.period, q));
   }
 
   @Post()

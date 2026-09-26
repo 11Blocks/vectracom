@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Modal, Card, Skeleton, Input, Select, Textarea, useToast, Tabs, ConfirmDialog } from '@/components/ui';
+import { Button, Badge, Modal, Card, Skeleton, Input, Select, Textarea, useToast, Tabs, ConfirmDialog, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { stockService, serialLifecycle } from '@/services';
 import { api } from '@/lib/api';
@@ -60,7 +60,12 @@ function Content() {
 
   const { data: items, loading, error: itemsError, refetch } = useQuery(() => stockService.listItems(), []);
   const { data: warehouses, error: whError } = useQuery(() => stockService.listWarehouses(), []);
-  const { data: movements, refetch: refetchMv, error: mvError } = useQuery(() => stockService.listMovements(), []);
+  const [mvType, setMvType] = useState('');
+  const mvPager = usePagination(50, mvType);
+  const { data: movements, refetch: refetchMv, error: mvError } = useQuery(
+    () => stockService.pageMovements({ type: mvType || undefined, ...mvPager.params }),
+    [mvType, mvPager.offset, mvPager.limit],
+  );
   const stockError = itemsError || whError || mvError;
 
   // Niveaux par article — source de vérité des quantités par emplacement
@@ -119,7 +124,8 @@ function Content() {
     .filter(i => i.category === tab)
     .filter(i => !search || `${i.reference} ${i.designation}`.toLowerCase().includes(search.toLowerCase()));
   const lowCount = itemsList.filter(i => totalOf(i.id) <= (i.thresholdAlert ?? 0)).length;
-  const mvList = Array.isArray(movements) ? movements : [];
+  const mvList: any[] = movements?.items ?? [];
+  const mvTotal = movements?.total ?? 0;
 
   return (
     <div className="space-y-4">
@@ -291,8 +297,15 @@ function Content() {
           {/* Mouvements récents */}
           <Card className="border-[#1e2e25] bg-[#111916] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#1e2e25] flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#e8ede9] flex items-center gap-2"><ArrowRightLeft size={15} className="text-[#0f9d70]" /> Mouvements récents</h3>
-              {role !== 'direction' && <Button size="sm" variant="secondary" onClick={() => setShowMovement(true)}><Plus size={13} /> Mouvement</Button>}
+              <h3 className="text-sm font-semibold text-[#e8ede9] flex items-center gap-2"><ArrowRightLeft size={15} className="text-[#0f9d70]" /> Mouvements</h3>
+              <div className="flex items-center gap-2">
+                <select value={mvType} onChange={e => setMvType(e.target.value)}
+                  className="h-8 px-2 rounded-md border border-[#1e2e25] bg-[#0a0f0d] text-xs text-[#e8ede9]">
+                  <option value="">Tous types</option>
+                  {Object.entries(MOVEMENT_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+                </select>
+                {role !== 'direction' && <Button size="sm" variant="secondary" onClick={() => setShowMovement(true)}><Plus size={13} /> Mouvement</Button>}
+              </div>
             </div>
             <div className="overflow-x-auto max-h-96 overflow-y-auto">
               <table className="w-full text-sm">
@@ -309,7 +322,7 @@ function Content() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1e2e25]/50 bg-[#111916]">
-                  {mvList.slice(0, 50).map((mv: any) => {
+                  {mvList.map((mv: any) => {
                     const meta = MOVEMENT_META[mv.type] ?? { label: mv.type, cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]', sign: null };
                     const item = itemOf(mv.stockItemId);
                     return (
@@ -336,11 +349,13 @@ function Content() {
                     );
                   })}
                   {mvList.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#7a8f80]">Aucun mouvement enregistré</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#7a8f80]">{mvType ? 'Aucun mouvement de ce type' : 'Aucun mouvement enregistré'}</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
+            <Pager className="border-t border-[#1e2e25]" total={mvTotal} offset={mvPager.offset} limit={mvPager.limit}
+              onChange={mvPager.setOffset} onLimitChange={mvPager.setLimit} />
           </Card>
         </>
       )}

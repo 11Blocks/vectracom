@@ -15,6 +15,14 @@ export function absoluteUploadUrl(url: string | null | undefined): string {
   return `${UPLOADS_BASE}${path}${token ? (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token) : ''}`;
 }
 
+/** Query string sans les valeurs vides (filtres non renseignés). */
+function qs(params?: Record<string, string | undefined | null>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params || {})) if (v !== undefined && v !== null && v !== '') q.set(k, v);
+  const s = q.toString();
+  return s ? '?' + s : '';
+}
+
 export const filesService = {
   upload: (file: File, category: string = 'docs') => {
     const fd = new FormData();
@@ -39,6 +47,8 @@ export const partnersService = {
 
 export const missionsService = {
   list: (params?: Record<string, string>) => api.get('/missions?' + new URLSearchParams(params || {})),
+  page: (params?: Record<string, string | undefined>) => api.getPage('/missions' + qs(params)),
+  statusCounts: (search?: string): Promise<Record<string, number>> => api.get('/missions/status-counts' + qs({ search })),
   get: (id: string) => api.get('/missions/' + id),
   create: (data: any) => api.post('/missions', data),
   updateStatus: (id: string, status: string, reason?: string) => api.patch('/missions/' + id + '/status', { status, rejectionReason: reason }),
@@ -79,6 +89,18 @@ export const siteChecklistService = {
 //  PLANNING / IMPORT
 // ═══════════════════════════════════════════════════════════
 
+export interface DashboardSummary {
+  days: number;
+  activity: Array<{ day: string; missions: number; incidents: number | null }>;
+  kpis: { todayMissions: number; lateMissions: number; pendingValidation: number; openCriticalIncidents: number | null };
+  lastMissionDate: string | null;
+  lastIncidentDate: string | null;
+}
+
+export const dashboardService = {
+  summary: (days = 7): Promise<DashboardSummary> => api.get('/dashboard/summary?days=' + days),
+};
+
 export const performanceService = {
   dashboard: (opts?: { from?: string; to?: string; week?: number; year?: number }) => {
     const q = new URLSearchParams();
@@ -90,6 +112,8 @@ export const performanceService = {
     return api.get('/performance/dashboard' + (qs ? '?' + qs : ''));
   },
   trend: (weeks?: number) => api.get('/performance/trend' + (weeks ? '?weeks=' + weeks : '')),
+  latest: (): Promise<{ week: number | null; year: number | null; from: string | null; to: string | null; last: string | null }> =>
+    api.get('/performance/latest'),
   interpret: (opts?: { from?: string; to?: string; week?: number; year?: number }) => {
     const q = new URLSearchParams();
     if (opts?.week) q.set('week', String(opts.week));
@@ -209,6 +233,7 @@ export const stockService = {
   listSerials: (itemId: string) => api.get('/stock-items/' + itemId + '/serials'),
   createSerial: (itemId: string, serialNumber: string) => api.post('/stock-items/' + itemId + '/serials', { serialNumber }),
   listMovements: (params?: Record<string, string>) => api.get('/stock-movements?' + new URLSearchParams(params || {})),
+  pageMovements: (params?: Record<string, string | undefined>) => api.getPage('/stock-movements' + qs(params)),
   listPriceItems: (params?: Record<string, string>) => api.get('/price-items?' + new URLSearchParams(params || {})),
   searchPriceItems: (q: string) => api.get('/price-items/search?q=' + encodeURIComponent(q)),
   focusImport: (file: File) => {
@@ -245,6 +270,9 @@ export const vehiclesService = {
 
 export const incidentsService = {
   list: (params?: Record<string, string>) => api.get('/incidents?' + new URLSearchParams(params || {})),
+  page: (params?: Record<string, string | undefined>) => api.getPage('/incidents' + qs(params)),
+  stats: (): Promise<{ byStatus: Record<string, number>; bySeverity: Record<string, number>; byRubrique: Record<string, number> }> =>
+    api.get('/incidents/stats'),
   get: (id: string) => api.get('/incidents/' + id),
   create: (data: any) => api.post('/incidents', data),
   update: (id: string, data: any) => api.put('/incidents/' + id, data),
@@ -293,6 +321,10 @@ export const iaVisionService = {
 
 export const invoicesService = {
   list: (params?: Record<string, string>) => api.get('/invoices?' + new URLSearchParams(params || {})),
+  page: (params?: Record<string, string | undefined>) => api.getPage('/invoices' + qs(params)),
+  summary: (clientId?: string): Promise<{
+    total: number; byStatus: Record<string, number>; issuedTtc: number; paid: number; remaining: number; overdue: number; drafts: number;
+  }> => api.get('/invoices/summary' + qs({ clientId })),
   get: (id: string) => api.get('/invoices/' + id),
   preview: (id: string) => api.get('/invoices/' + id + '/preview'),
   generate: (periodStart: string, periodEnd: string, clientId?: string) =>
@@ -385,6 +417,7 @@ export const hrService = {
 
 export const accountingService = {
   listExpenses: (params?: Record<string, string>) => api.get('/expenses?' + new URLSearchParams(params || {})),
+  pageExpenses: (params?: Record<string, string | undefined>) => api.getPage('/expenses' + qs(params)),
   createExpense: (data: any) => api.post('/expenses', data),
   updateExpense: (id: string, data: any) => api.put('/expenses/' + id, data),
   deleteExpense: (id: string) => api.delete('/expenses/' + id),
@@ -454,6 +487,7 @@ export const saasService = {
   revokeLicense: (userId: string, companyId?: string) => api.post('/saas/licenses/revoke' + tq(companyId), { userId }),
   listLicenses: (companyId?: string) => api.get('/saas/licenses' + tq(companyId)),
   listInvoices: (params?: Record<string, string>) => api.get('/saas/invoices?' + new URLSearchParams(params || {})),
+  pageInvoices: (params?: Record<string, string | undefined>) => api.getPage('/saas/invoices' + qs(params)),
   invoicesSummary: (companyId?: string) => api.get('/saas/invoices-summary' + tq(companyId)),
   generateInvoice: (periodStart: string, periodEnd: string, companyId?: string) =>
     api.post('/saas/invoices/generate' + tq(companyId), { periodStart, periodEnd }),
@@ -493,6 +527,7 @@ export const businessService = {
 
 export const notificationsService = {
   list: (params?: Record<string, string>) => api.get('/notifications?' + new URLSearchParams(params || {})),
+  page: (params?: Record<string, string | undefined>) => api.getPage('/notifications' + qs(params)),
   unreadCount: () => api.get('/notifications/unread-count'),
   markAsRead: (id: string) => api.put('/notifications/' + id + '/read'),
   markAllAsRead: () => api.put('/notifications/read-all'),

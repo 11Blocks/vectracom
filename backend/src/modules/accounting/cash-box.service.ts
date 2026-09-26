@@ -10,6 +10,7 @@ import { DailyAttendance } from '../hr/entities/daily-attendance.entity';
 import { DailyWorker } from '../hr/entities/daily-worker.entity';
 import { AuditService } from '../../common/audit/audit.service';
 import { monthBounds } from './accounting.service';
+import { pageParams } from '../../common/pagination';
 
 export interface CashEntryInput {
   entryDate?: string;
@@ -175,18 +176,20 @@ export class CashBoxService {
     return { loan, repayment };
   }
 
-  list(companyId: string, period?: string) {
+  list(companyId: string, period?: string, page: { limit?: number; offset?: number } = {}) {
+    const { take, skip } = pageParams(page, 2000);
     const qb = this.entryRepository
       .createQueryBuilder('e')
       .where('e.company_id = :companyId', { companyId })
       .orderBy('e.entryDate', 'DESC')
       .addOrderBy('e.createdAt', 'DESC')
-      .take(2000);
+      .take(take)
+      .skip(skip);
     if (period) {
       const { from, to } = monthBounds(period);
       qb.andWhere('e.entry_date BETWEEN :from AND :to', { from, to });
     }
-    return qb.getMany();
+    return qb.getManyAndCount();
   }
 
   /**

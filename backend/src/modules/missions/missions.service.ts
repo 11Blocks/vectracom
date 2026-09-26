@@ -120,7 +120,26 @@ export class MissionsService {
     if (filters.invoiced === 'true') qb.andWhere('mission.invoice_id IS NOT NULL');
     if (filters.invoiced === 'false') qb.andWhere('mission.invoice_id IS NULL');
 
-    return qb.getMany();
+    return qb.getManyAndCount();
+  }
+
+  /** Compteurs par statut (onglets de la liste), même recherche que list(). */
+  async statusCounts(companyId: string, search?: string): Promise<Record<string, number>> {
+    const qb = this.missionRepository
+      .createQueryBuilder('mission')
+      .leftJoin('mission.team', 'team')
+      .select('mission.status', 'status')
+      .addSelect('COUNT(*)::int', 'count')
+      .where('mission.company_id = :companyId', { companyId })
+      .groupBy('mission.status');
+    if (search?.trim()) {
+      qb.andWhere(
+        '(mission.client_site ILIKE :q OR mission.sonatel_dossier_number ILIKE :q OR mission.zone ILIKE :q OR team.name ILIKE :q)',
+        { q: `%${search.trim()}%` },
+      );
+    }
+    const rows = await qb.getRawMany<{ status: string; count: number }>();
+    return Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
   }
 
   async findOne(companyId: string, id: string): Promise<Mission> {

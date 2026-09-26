@@ -29,6 +29,7 @@ import {
 import { Type } from 'class-transformer';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { withTotal } from '../../common/pagination';
 import { MissionsService } from './missions.service';
 import { FieldReportService } from './field-report.service';
 import { PvRecetteService } from './pv-recette.service';
@@ -106,12 +107,19 @@ export class MissionsController {
   }
 
   @Get()
-  list(
+  async list(
     @CurrentUser('companyId') companyId: string | null,
     @Query() query: ListMissionsQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     this.requireTenant(companyId);
-    return this.missionsService.list(companyId!, query);
+    return withTotal(res, await this.missionsService.list(companyId!, query));
+  }
+
+  @Get('status-counts')
+  statusCounts(@CurrentUser('companyId') companyId: string | null, @Query('search') search?: string) {
+    this.requireTenant(companyId);
+    return this.missionsService.statusCounts(companyId!, search);
   }
 
   @Get(':id')

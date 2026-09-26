@@ -48,6 +48,27 @@ function handleAuthFailure(status: number, body: any, token: string | null) {
   }
 }
 
+export interface Page<T> {
+  items: T[];
+  total: number;
+}
+
+/** Liste paginée : corps = tableau, total dans l'en-tête X-Total-Count. */
+async function requestPage<T = any>(path: string): Promise<Page<T>> {
+  const token = getToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_URL}${path}`, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: res.statusText }));
+    handleAuthFailure(res.status, body, token);
+    throw new Error(body.message || `Erreur ${res.status}`);
+  }
+  const items = (await res.json()) as T[];
+  const header = res.headers.get('X-Total-Count');
+  return { items, total: header !== null ? Number(header) : items.length };
+}
+
 async function upload<T = any>(path: string, formData: FormData): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {};
@@ -63,6 +84,7 @@ async function upload<T = any>(path: string, formData: FormData): Promise<T> {
 
 export const api = {
   get: <T = any>(path: string) => request<T>(path),
+  getPage: <T = any>(path: string) => requestPage<T>(path),
   post: <T = any>(path: string, data?: unknown) =>
     request<T>(path, { method: 'POST', body: data !== undefined ? JSON.stringify(data) : undefined }),
   put: <T = any>(path: string, data?: unknown) =>

@@ -240,37 +240,82 @@ export class PerformanceDashboardService {
     };
   }
 
+  /** Année ISO de la semaine (le 29/12 peut appartenir à S1 de l'année suivante). */
+  static isoWeekYear(d: Date): number {
+    const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    return date.getUTCFullYear();
+  }
+
+  private static weekKey(d: Date): string {
+    return `${PerformanceDashboardService.isoWeekYear(d)}-W${String(PerformanceDashboardService.isoWeek(d)).padStart(2, '0')}`;
+  }
+
+  /** Semaines ISO contiguës jusqu'à la semaine courante, semaines sans activité à 0. */
   async trend(companyId: string, weeks = 5) {
     const now = new Date();
-    const start = new Date(now.getTime() - weeks * 7 * 86400000);
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() || 7) - 1));
+    const start = new Date(monday.getTime() - (weeks - 1) * 7 * 86400000);
+    const end = new Date(monday.getTime() + 7 * 86400000);
+
+    const buckets = new Map<string, { week: number; year: number; cas: number; ok: number }>();
+    for (let i = 0; i < weeks; i++) {
+      const d = new Date(start.getTime() + i * 7 * 86400000);
+      buckets.set(PerformanceDashboardService.weekKey(d), {
+        week: PerformanceDashboardService.isoWeek(d),
+        year: PerformanceDashboardService.isoWeekYear(d),
+        cas: 0,
+        ok: 0,
+      });
+    }
+
     const missions = await this.missionRepository
       .createQueryBuilder('m')
-      .where('m.company_id = :cid AND m.date_mission >= :s', { cid: companyId, s: start })
+      .where('m.company_id = :cid AND m.date_mission >= :s AND m.date_mission < :e', { cid: companyId, s: start, e: end })
       .getMany();
     const reports = missions.length
-      ? await this.reportRepository.createQueryBuilder('r').where('r.company_id = :cid', { cid: companyId }).getMany()
+      ? await this.reportRepository
+          .createQueryBuilder('r')
+          .where('r.company_id = :cid', { cid: companyId })
+          .andWhere('r.mission_id IN (:...ids)', { ids: missions.map((m) => m.id) })
+          .getMany()
       : [];
     const successByMission = new Set(reports.filter((r) => r.fieldStatus === 'succes').map((r) => r.missionId));
 
-    const byWeek = new Map<number, { cas: number; ok: number }>();
     for (const m of missions) {
-      const w = PerformanceDashboardService.isoWeek(new Date(m.dateMission));
-      if (!byWeek.has(w)) byWeek.set(w, { cas: 0, ok: 0 });
-      const e = byWeek.get(w)!;
+      const e = buckets.get(PerformanceDashboardService.weekKey(new Date(m.dateMission)));
+      if (!e) continue;
       e.cas += 1;
       if (m.status === 'validee' || successByMission.has(m.id) || (m.status === 'terminee' && !m.blocageMotif)) e.ok += 1;
     }
     return {
-      weeks: [...byWeek.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([week, v]) => ({
-          week: `S${week}`,
+      weeks: [...buckets.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([key, v]) => ({
+          key,
+          week: `S${v.week}`,
+          year: v.year,
           cas: v.cas,
           ok: v.ok,
           nok: v.cas - v.ok,
           taux: v.cas > 0 ? Math.round((v.ok / v.cas) * 100) : 0,
         })),
     };
+  }
+
+  /** Dernière semaine ISO ayant des missions (jusqu'à aujourd'hui) : période par défaut de l'écran. */
+  async latestWeek(companyId: string): Promise<{ week: number; year: number; from: string; to: string; last: string } | null> {
+    const row = await this.missionRepository
+      .createQueryBuilder('m')
+      .select('MAX(m.date_mission)', 'last')
+      .where('m.company_id = :cid AND m.date_mission <= :now', { cid: companyId, now: new Date() })
+      .getRawOne<{ last: Date | string | null }>();
+    if (!row?.last) return null;
+    const d = new Date(row.last);
+    const week = PerformanceDashboardService.isoWeek(d);
+    const year = PerformanceDashboardService.isoWeekYear(d);
+    return { week, year, ...PerformanceDashboardService.weekBounds(week, year), last: d.toISOString() };
   }
 
   /** Export Excel format ONECOMIT : feuilles Dashboard + Dashboard_OLT (+ synthèse). */

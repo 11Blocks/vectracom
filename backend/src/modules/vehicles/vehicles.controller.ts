@@ -1,5 +1,7 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { IsIn, IsOptional, IsString } from 'class-validator';
+import { PageQueryDto, withTotal } from '../../common/pagination';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { VehiclesService, Badge } from './vehicles.service';
@@ -15,6 +17,10 @@ class ListVehiclesQueryDto {
   @IsOptional() @IsString() teamId?: string;
   @IsOptional() @IsString() @IsIn(VEHICLE_STATUSES as unknown as string[]) status?: string;
   @IsOptional() @IsString() @IsIn(['rouge', 'orange', 'vert']) echeance?: string;
+}
+
+class ListEventsQueryDto extends PageQueryDto {
+  @IsOptional() @IsString() @IsIn(VEHICLE_EVENT_TYPES as unknown as string[]) type?: string;
 }
 
 @Controller('vehicles')
@@ -50,13 +56,14 @@ export class VehiclesController {
   }
 
   @Get(':id/events')
-  listEvents(
+  async listEvents(
     @CurrentUser('companyId') companyId: string | null,
     @Param('id') id: string,
-    @Query('type') type?: string,
+    @Query() query: ListEventsQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     this.requireTenant(companyId);
-    return this.vehiclesService.listEvents(companyId!, id, type);
+    return withTotal(res, await this.vehiclesService.listEvents(companyId!, id, query.type, query));
   }
 
   @Post(':id/events')
@@ -113,9 +120,14 @@ export class VehiclesController {
   }
 
   @Get(':id/checks')
-  checks(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+  async checks(
+    @CurrentUser('companyId') companyId: string | null,
+    @Param('id') id: string,
+    @Query() query: PageQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     this.requireTenant(companyId);
-    return this.vehiclesService.listChecks(companyId!, id);
+    return withTotal(res, await this.vehiclesService.listChecks(companyId!, id, query));
   }
 
   /** Checklist 15 secondes — le geste quotidien du chef d'équipe. */

@@ -241,6 +241,80 @@ export function EmptyState({ icon, title, description, action }: { icon?: React.
   );
 }
 
+/** Pagination serveur : « 1–50 sur 812 » + précédent / suivant + taille de page. */
+export function Pager({ total, offset, limit, onChange, onLimitChange, sizes = [25, 50, 100, 200], className }: {
+  total: number;
+  offset: number;
+  limit: number;
+  onChange: (offset: number) => void;
+  onLimitChange?: (limit: number) => void;
+  sizes?: number[];
+  className?: string;
+}) {
+  if (total <= 0) return null;
+  const page = Math.floor(offset / limit) + 1;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const btn = 'h-8 px-2.5 rounded-md border border-[#1e2e25] text-xs text-[#e8ede9] disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#0f9d70]/40';
+  return (
+    <div className={cn('flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs text-[#7a8f80]', className)}>
+      <span>
+        {(offset + 1).toLocaleString('fr-FR')}–{Math.min(offset + limit, total).toLocaleString('fr-FR')} sur {total.toLocaleString('fr-FR')}
+      </span>
+      <div className="flex items-center gap-2">
+        {onLimitChange && (
+          <select
+            value={limit}
+            onChange={(e) => onLimitChange(Number(e.target.value))}
+            className="h-8 px-2 rounded-md border border-[#1e2e25] bg-[#111916] text-xs text-[#e8ede9]"
+          >
+            {sizes.map((s) => <option key={s} value={s}>{s} / page</option>)}
+          </select>
+        )}
+        <button className={btn} disabled={page <= 1} onClick={() => onChange(0)}>«</button>
+        <button className={btn} disabled={page <= 1} onClick={() => onChange(Math.max(0, offset - limit))}>Précédent</button>
+        <span className="tabular-nums">Page {page} / {pages}</span>
+        <button className={btn} disabled={page >= pages} onClick={() => onChange(offset + limit)}>Suivant</button>
+        <button className={btn} disabled={page >= pages} onClick={() => onChange((pages - 1) * limit)}>»</button>
+      </div>
+    </div>
+  );
+}
+
+/** État d'une liste paginée côté serveur ; revient à la première page quand `resetKey` change (filtres). */
+export function usePagination(defaultLimit = 50, resetKey: unknown = null) {
+  const [offset, setOffset] = useState(0);
+  const [limit, setLimitState] = useState(defaultLimit);
+  const [lastKey, setLastKey] = useState(resetKey);
+  if (lastKey !== resetKey) {
+    setLastKey(resetKey);
+    setOffset(0);
+  }
+  const setLimit = useCallback((l: number) => { setLimitState(l); setOffset(0); }, []);
+  return { offset, limit, setOffset, setLimit, params: { limit: String(limit), offset: String(offset) } };
+}
+
+/** État vide des graphiques : explique l'absence de données et rappelle la dernière date disponible. */
+export function ChartEmpty({ message = 'Aucune donnée sur la période', lastDates, action, className = 'h-56' }: {
+  message?: string;
+  lastDates?: Array<{ label: string; date?: string | null }>;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  const known = (lastDates ?? []).filter(d => d.date);
+  const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  return (
+    <div className={`flex flex-col items-center justify-center text-center gap-1 ${className}`}>
+      <p className="text-sm font-medium text-[#7a8f80]">{message}</p>
+      {known.length > 0 && (
+        <p className="text-xs text-[#7a8f80]/70">
+          {known.map(d => `${d.label} : ${fmt(d.date!)}`).join(' · ')}
+        </p>
+      )}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
    TABLE — Style VECTRACOM
    ═══════════════════════════════════════════════════════════ */

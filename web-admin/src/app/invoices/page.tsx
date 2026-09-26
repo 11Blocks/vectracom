@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast, Pager, usePagination } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { useSessionUser } from '@/components/admin/TenantPicker';
 import { invoicesService, clientsService } from '@/services';
@@ -32,8 +32,20 @@ function Content() {
   const [statusFilter, setStatusFilter] = useState('');
   const [clientFilter, setClientFilter] = useState('');
 
-  const { data, loading, refetch } = useQuery(() => invoicesService.list(), []);
-  const invoices: any[] = Array.isArray(data) ? data : [];
+  const pager = usePagination(50, `${statusFilter}|${clientFilter}`);
+  const { data, loading, refetch: refetchPage } = useQuery(
+    () => invoicesService.page({
+      status: statusFilter && statusFilter !== 'en_retard' ? statusFilter : undefined,
+      overdue: statusFilter === 'en_retard' ? 'true' : undefined,
+      clientId: clientFilter || undefined,
+      ...pager.params,
+    }),
+    [statusFilter, clientFilter, pager.offset, pager.limit],
+  );
+  const { data: summary, refetch: refetchSummary } = useQuery(() => invoicesService.summary(clientFilter || undefined), [clientFilter]);
+  const refetch = () => { refetchPage(); refetchSummary(); };
+  const filtered: any[] = data?.items ?? [];
+  const total = data?.total ?? 0;
   const { data: clientsData, refetch: refetchClients } = useQuery(() => clientsService.list(), []);
   const clients: any[] = Array.isArray(clientsData) ? clientsData : [];
 
@@ -50,23 +62,15 @@ function Content() {
     },
   );
 
-  const filtered = invoices.filter(i =>
-    (!statusFilter || (statusFilter === 'en_retard' ? i.overdue : i.status === statusFilter)) &&
-    (!clientFilter || i.clientId === clientFilter),
-  );
+  const stats = {
+    issuedTtc: summary?.issuedTtc ?? 0,
+    paid: summary?.paid ?? 0,
+    remaining: summary?.remaining ?? 0,
+    overdue: summary?.overdue ?? 0,
+    drafts: summary?.drafts ?? 0,
+  };
 
-  const stats = useMemo(() => {
-    const issued = invoices.filter(i => !['brouillon', 'en_correction', 'annulee'].includes(i.status) && i.kind !== 'avoir');
-    return {
-      issuedTtc: issued.reduce((s, i) => s + Number(i.totalTtc ?? 0), 0),
-      paid: issued.reduce((s, i) => s + Number(i.amountPaid ?? 0), 0),
-      remaining: issued.reduce((s, i) => s + Number(i.remaining ?? 0), 0),
-      overdue: invoices.filter(i => i.overdue).length,
-      drafts: invoices.filter(i => ['brouillon', 'en_correction'].includes(i.status)).length,
-    };
-  }, [invoices]);
-
-  const countBy = (k: string) => (k === 'en_retard' ? stats.overdue : invoices.filter(i => i.status === k).length);
+  const countBy = (k: string) => (k === 'en_retard' ? stats.overdue : summary?.byStatus?.[k] ?? 0);
 
   return (
     <div className="space-y-4">
@@ -96,7 +100,7 @@ function Content() {
 
       <div className="flex flex-wrap items-center gap-1.5">
         {['', ...Object.keys(INVOICE_STATUS_META), 'en_retard'].map(k => {
-          const count = k ? countBy(k) : invoices.length;
+          const count = k ? countBy(k) : summary?.total ?? 0;
           if (k && !count && statusFilter !== k) return null;
           const label = !k ? 'Toutes' : k === 'en_retard' ? 'En retard' : INVOICE_STATUS_META[k].label;
           return (
@@ -115,12 +119,12 @@ function Content() {
         )}
       </div>
 
-      {loading ? (
+      {loading && !data ? (
         <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
       ) : filtered.length === 0 ? (
         <Card className="border-[#1e2e25] bg-[#111916] p-12 text-center">
           <Receipt size={40} className="mx-auto text-[#7a8f80]/50 mb-3" />
-          <p className="text-sm text-[#7a8f80] mb-1">{invoices.length ? 'Aucune facture pour ce filtre' : 'Aucune facture'}</p>
+          <p className="text-sm text-[#7a8f80] mb-1">{summary?.total ? 'Aucune facture pour ce filtre' : 'Aucune facture'}</p>
           <p className="text-xs text-[#7a8f80]/70 mb-4">Générez la facture du mois depuis les missions validées, ou créez une facture manuelle à lignes libres.</p>
         </Card>
       ) : (
@@ -159,6 +163,8 @@ function Content() {
               })}
             </tbody>
           </table>
+          <Pager className="border-t border-[#1e2e25] bg-[#111916]" total={total} offset={pager.offset} limit={pager.limit}
+            onChange={pager.setOffset} onLimitChange={pager.setLimit} />
         </div>
       )}
 
