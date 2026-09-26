@@ -51,7 +51,7 @@ Baseline locale attendue après fill : ~759 missions, 80 incidents, FACT-202606-
 - `/uploads` protégé par jeton (`?token=` ou Bearer), rangé `uploads/<catégorie>/<companyId>/`, servi aussi sous `/api/uploads` (Caddy ne route que `/api/*` vers le backend). `UPLOADS_PUBLIC=true` = retour arrière
 - Alertes quotidiennes 07:00 UTC (`NOTIFICATIONS_CRON=false` pour couper) ; facturation automatique volontairement NON planifiée
 - IA : `GET ai/status` → `mode: regles` tant que GEMINI/YOLO non configurés (badge « Mode règles »)
-- À faire côté VPS : volume persistant pour `/app/uploads` du backend (absent du compose → fichiers perdus à chaque rebuild)
+- VPS : volume nommé `vectracom_uploads` monté sur `/app/uploads` du backend (ajouté au compose VPS le 2026-09-26 avec accord ; sauvegarde `~/backups/compose_uploads_20260926_073103/`) — ne jamais le supprimer
 
 ## Règles agent
 - Remplir **toute** la plateforme (pipeline produit), pas 1–2 modules isolés

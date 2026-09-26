@@ -68,6 +68,8 @@ services:
     ports:
       # Host 3100 (never 3000 = TrackIT)
       - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-3100}:3000"
+    volumes:
+      - uploads:/app/uploads
     networks:
       - vectracom-net
 
@@ -129,4 +131,5 @@ networks:
 volumes:
   pgdata:
   redisdata:
+  uploads:
   dendritedata:
