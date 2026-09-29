@@ -6,7 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": { "backgroundColor": "#0f9d70", "resizeMode": "contain" },
+    "splash": {
+      "backgroundColor": "#0f9d70",
+      "resizeMode": "contain"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "sn.greent.vectracom",
@@ -15,7 +18,9 @@
         "NSLocationWhenInUseUsageDescription": "GPS pour la géolocalisation des interventions et le suivi terrain",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "GPS en arrière-plan pour le suivi des équipes terrain même quand l'app est fermée",
         "NSLocationAlwaysUsageDescription": "GPS en arrière-plan pour le suivi des équipes terrain",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
@@ -28,7 +33,14 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "plugins": [
@@ -54,8 +66,13 @@
     "extra": {
       "apiUrl": "https://vectracom.track-it.org/api/v1",
       "eas": {
-        "projectId": ""
+        "projectId": "ccbe6c62-f7c0-4197-92a6-72330fb3dd23"
       }
+    },
+    "owner": "green_t",
+    "runtimeVersion": { "policy": "sdkVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/ccbe6c62-f7c0-4197-92a6-72330fb3dd23"
     }
   }
 }
