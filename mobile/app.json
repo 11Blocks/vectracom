@@ -25,6 +25,7 @@
     },
     "android": {
       "package": "sn.greent.vectracom",
+      "runtimeVersion": { "policy": "appVersion" },
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
@@ -72,7 +73,8 @@
     "owner": "green_t",
     "runtimeVersion": { "policy": "sdkVersion" },
     "updates": {
-      "url": "https://u.expo.dev/ccbe6c62-f7c0-4197-92a6-72330fb3dd23"
+      "url": "https://u.expo.dev/ccbe6c62-f7c0-4197-92a6-72330fb3dd23",
+      "requestHeaders": { "expo-channel-name": "production" }
     }
   }
 }
