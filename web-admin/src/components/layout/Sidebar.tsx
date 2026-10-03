@@ -8,7 +8,7 @@ import {
   AlertTriangle, Eye, Building2, CreditCard, Activity, TrendingUp,
   Bell, MapPin, Bot, Warehouse, Settings, UserPlus, UserCog, LayoutGrid,
   Upload, ListChecks, Clock, MessageSquare, KeyRound, History, UsersRound,
-  ArrowRightLeft, Wallet,
+  ArrowRightLeft, Wallet, Layers,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: React.ReactNode; roles?: string[]; }
@@ -43,6 +43,7 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/missions', label: 'Missions', icon: icon(ClipboardList) },
     ]},
     { group: 'Ressources', items: [
+      { href: '/items', label: 'Items', icon: icon(Layers) },
       { href: '/equipes', label: 'Équipes', icon: icon(Users) },
       { href: '/techniciens', label: 'Techniciens', icon: icon(UserCog) },
       { href: '/partenaires', label: 'Partenaires', icon: icon(Building2) },

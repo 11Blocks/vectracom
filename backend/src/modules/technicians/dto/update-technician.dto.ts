@@ -63,6 +63,18 @@ export class UpdateTechnicianDto {
   documents?: Array<Record<string, unknown>>;
 
   @IsOptional()
+  @IsString()
+  fonction?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  itemId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string | null;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
 }

@@ -5,11 +5,21 @@ import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, EmptyState, Modal, Input, Select, useToast, ConfirmDialog } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { techniciansService, teamsService } from '@/services';
+import { techniciansService, teamsService, itemsService, zonesService } from '@/services';
 import { UserCheck, Plus, Loader2, Trash2, Edit, Users, Star } from 'lucide-react';
 
 const COMPETENCES = ['DEPLOIEMENT', 'DENSIF', 'EXTENSION', 'OSM', 'SAV', 'GC', 'DEVOIEMENT'];
 const CONTRACTS = ['CDD', 'CDI', 'PRESTATAIRE'];
+const FONCTIONS = [
+  { value: 'CHEF', label: 'Chef d’équipe' },
+  { value: 'BINOME', label: 'Binôme' },
+  { value: 'STAGIAIRE', label: 'Stagiaire' },
+  { value: 'ACCOMPAGNANT', label: 'Accompagnant' },
+  { value: 'JOURNALIER', label: 'Journalier' },
+  { value: 'CHEF_TIREUR', label: 'Chef tireur' },
+  { value: 'CHEF_RACCORDEUR', label: 'Chef raccordeur' },
+];
+const DOC_TYPES = ['CNI', 'CONTRAT', 'CV', 'DIPLOME', 'ATTESTATION', 'AUTRE'];
 
 export default function Page() {
   return <AppShell><Content /></AppShell>;
@@ -116,9 +126,14 @@ function TechFormModal({
   open: boolean; tech?: any | null; teams: any[]; leaders: any[]; onClose: () => void; onDone: () => void;
 }) {
   const { toast } = useToast();
+  const { data: itemsData } = useQuery(() => itemsService.list(), []);
+  const { data: zonesData } = useQuery(() => zonesService.list(), []);
+  const items = Array.isArray(itemsData) ? itemsData : [];
+  const zones = Array.isArray(zonesData) ? zonesData : [];
   const [f, setF] = useState({
     fullName: '', teamId: '', phone: '', isTeamLeader: false, teamLeaderId: '',
     contractType: 'CDI', competences: [] as string[], active: true, experienceYears: '',
+    fonction: '', itemId: '', zoneId: '', documents: [] as any[],
   });
 
   useEffect(() => {
@@ -133,11 +148,16 @@ function TechFormModal({
         competences: tech.competences ?? [],
         active: tech.active !== false,
         experienceYears: tech.experienceYears != null ? String(tech.experienceYears) : '',
+        fonction: tech.fonction ?? '',
+        itemId: tech.itemId ?? '',
+        zoneId: tech.zoneId ?? '',
+        documents: tech.documents ?? [],
       });
     } else if (open) {
       setF({
         fullName: '', teamId: teams[0]?.id ?? '', phone: '', isTeamLeader: false, teamLeaderId: '',
         contractType: 'CDI', competences: [], active: true, experienceYears: '',
+        fonction: '', itemId: '', zoneId: '', documents: [],
       });
     }
   }, [tech, open, teams]);
@@ -160,6 +180,10 @@ function TechFormModal({
     contractType: f.contractType,
     competences: f.competences,
     experienceYears: f.experienceYears !== '' ? Number(f.experienceYears) : undefined,
+    fonction: f.fonction || null,
+    itemId: f.itemId || null,
+    zoneId: f.zoneId || null,
+    documents: f.documents.filter((d: any) => d.type && d.fileUrl).map((d: any) => ({ type: d.type, fileUrl: d.fileUrl, ...(d.expirationDate ? { expirationDate: d.expirationDate } : {}) })),
     ...(tech ? { active: f.active } : {}),
   });
 
@@ -187,6 +211,41 @@ function TechFormModal({
             {CONTRACTS.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
           <Input label="Expérience (ans)" type="number" value={f.experienceYears} onChange={(e) => setF({ ...f, experienceYears: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="Fonction occupée" value={f.fonction} onChange={(e) => setF({ ...f, fonction: e.target.value })}>
+            <option value="">—</option>
+            {FONCTIONS.map((fn) => <option key={fn.value} value={fn.value}>{fn.label}</option>)}
+          </Select>
+          <Select label="Zone d'intervention" value={f.zoneId} onChange={(e) => setF({ ...f, zoneId: e.target.value })}>
+            <option value="">—</option>
+            {zones.map((z: any) => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </Select>
+        </div>
+        <Select label="Projet affecté (Item)" value={f.itemId} onChange={(e) => setF({ ...f, itemId: e.target.value })}>
+          <option value="">—</option>
+          {items.map((it: any) => <option key={it.id} value={it.id}>{it.code} · {it.label}</option>)}
+        </Select>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-xs font-medium text-[#7a8f80]">Dossier (CNI, CV, diplôme, attestation, contrat)</p>
+            <Button type="button" size="sm" variant="outline" onClick={() => setF({ ...f, documents: [...f.documents, { type: 'CNI', fileUrl: '', expirationDate: '' }] })}>
+              <Plus size={12} /> Document
+            </Button>
+          </div>
+          {f.documents.length === 0 && <p className="text-xs text-[#7a8f80]/60">Aucun document renseigné.</p>}
+          <div className="space-y-2">
+            {f.documents.map((d: any, i: number) => (
+              <div key={i} className="grid grid-cols-[1fr_2fr_1fr_auto] gap-2 items-center">
+                <Select value={d.type} onChange={(e) => { const docs = [...f.documents]; docs[i] = { ...docs[i], type: e.target.value }; setF({ ...f, documents: docs }); }}>
+                  {DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </Select>
+                <Input placeholder="URL / lien du fichier" value={d.fileUrl} onChange={(e) => { const docs = [...f.documents]; docs[i] = { ...docs[i], fileUrl: e.target.value }; setF({ ...f, documents: docs }); }} />
+                <Input type="date" value={d.expirationDate ?? ''} onChange={(e) => { const docs = [...f.documents]; docs[i] = { ...docs[i], expirationDate: e.target.value }; setF({ ...f, documents: docs }); }} />
+                <button type="button" className="text-[#7a8f80] hover:text-[#C0392B] p-1" onClick={() => setF({ ...f, documents: f.documents.filter((_, j: number) => j !== i) })} title="Retirer"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-[#e8ede9]">
           <input type="checkbox" checked={f.isTeamLeader} onChange={(e) => setF({ ...f, isTeamLeader: e.target.checked, teamLeaderId: '' })} className="accent-[#0f9d70]" />

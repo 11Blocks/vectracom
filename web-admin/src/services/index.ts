@@ -688,6 +688,12 @@ export const zonesService = {
   update: (id: string, data: any) => api.put('/zones/' + id, data),
 };
 
+export const itemsService = {
+  list: () => api.get('/items'),
+  create: (data: any) => api.post('/items', data),
+  update: (id: string, data: any) => api.put('/items/' + id, data),
+};
+
 export const renfortsService = {
   list: (status?: string) => api.get('/renforts' + (status ? '?status=' + status : '')),
   get: (id: string) => api.get('/renforts/' + id),

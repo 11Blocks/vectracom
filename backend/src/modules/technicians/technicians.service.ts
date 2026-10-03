@@ -41,6 +41,9 @@ export class TechniciansService {
       contractType: (dto.contractType as ContractType) ?? null,
       competences: dto.competences ?? [],
       documents: (dto.documents as unknown as Technician["documents"]) ?? [],
+      fonction: dto.fonction ?? null,
+      itemId: dto.itemId ?? null,
+      zoneId: dto.zoneId ?? null,
     });
     return this.technicianRepository.save(technician);
   }
@@ -143,6 +146,9 @@ export class TechniciansService {
       ...(dto.contractType !== undefined ? { contractType: dto.contractType as ContractType } : {}),
       ...(dto.competences !== undefined ? { competences: dto.competences } : {}),
       ...(dto.documents !== undefined ? { documents: dto.documents as unknown as Technician['documents'] } : {}),
+      ...(dto.fonction !== undefined ? { fonction: dto.fonction } : {}),
+      ...(dto.itemId !== undefined ? { itemId: dto.itemId } : {}),
+      ...(dto.zoneId !== undefined ? { zoneId: dto.zoneId } : {}),
       ...(dto.active !== undefined ? { active: dto.active } : {}),
     });
     return this.technicianRepository.save(technician);

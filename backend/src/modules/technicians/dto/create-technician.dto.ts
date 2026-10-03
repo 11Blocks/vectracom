@@ -60,4 +60,16 @@ export class CreateTechnicianDto {
   @IsOptional()
   @IsArray()
   documents?: Array<Record<string, unknown>>;
+
+  @IsOptional()
+  @IsString()
+  fonction?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  itemId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string | null;
 }
