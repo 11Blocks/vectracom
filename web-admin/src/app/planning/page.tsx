@@ -7,7 +7,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { api } from '@/lib/api';
-import { STATUS_META, typeMeta, statusMeta } from '@/lib/mission-meta';
+import { STATUS_META, typeMeta, typeLabel, statusMeta } from '@/lib/mission-meta';
 import { reportsService } from '@/services';
 import {
   CalendarDays, Upload, ChevronLeft, ChevronRight, Table as TableIcon, LayoutGrid,
@@ -264,7 +264,7 @@ function Content() {
                     <tr key={m.id} className="hover:bg-[#172019] transition-colors cursor-pointer" onClick={() => router.push('/missions/' + m.id)}>
                       <td className="px-4 py-3 font-mono text-xs text-[#0f9d70]">{m.sonatelDossierNumber ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-[#e8ede9] max-w-44 truncate">{m.clientSite}</td>
-                      <td className="px-4 py-3"><span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border ' + typeMeta(m.typeTache).cls}>{m.typeTache}</span></td>
+                      <td className="px-4 py-3"><span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border ' + typeMeta(m.typeTache).cls}>{typeLabel(m.typeTache)}</span></td>
                       <td className="px-4 py-3 text-[#7a8f80]"><span className="inline-flex items-center gap-1"><MapPin size={12} className="text-[#7a8f80]/60" />{m.zone ?? '—'}</span></td>
                       <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">{fmtDate(m.dateMission)}</td>
                       <td className="px-4 py-3 text-[#7a8f80] text-xs tabular-nums">{hoursLabel(m) ?? '—'}</td>
@@ -314,7 +314,7 @@ function Content() {
                           </div>
                           <div className="flex items-center gap-1">
                             <span className="h-1 w-1 rounded-full shrink-0" style={{ background: meta.dot }} />
-                            <p className="text-[9px] text-[#7a8f80] truncate">{m.typeTache} · {meta.label}</p>
+                            <p className="text-[9px] text-[#7a8f80] truncate">{typeLabel(m.typeTache)} · {meta.label}</p>
                           </div>
                         </button>
                       );

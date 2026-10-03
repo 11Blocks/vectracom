@@ -7,6 +7,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Badge, Card, Skeleton, EmptyState, StatCard, AiBlock, ChartEmpty } from '@/components/ui';
 import { useQuery } from '@/hooks/use-query';
 import { missionsService, dashboardService, kpiService, stockService, vehiclesService, accountingService } from '@/services';
+import { typeLabel } from '@/lib/mission-meta';
 import {
   ClipboardCheck, AlertTriangle, Clock, Package, Truck, ShieldAlert, Receipt,
   Sparkles, CheckCircle, XCircle, ArrowRight, CalendarDays, Plus, FileBarChart, BarChart3,
@@ -211,7 +212,7 @@ function Content() {
                   <tr key={m.id} className="border-b border-[#1e2e25] cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={() => router.push('/missions/' + m.id)}>
                     <td className="px-4 py-3 text-[#e8ede9]">
                       <p className="font-medium">{m.clientSite || '—'}</p>
-                      <p className="text-xs text-[#7a8f80]">{m.typeTache} · {fmtDate(m.dateMission)}</p>
+                      <p className="text-xs text-[#7a8f80]">{typeLabel(m.typeTache)} · {fmtDate(m.dateMission)}</p>
                     </td>
                     <td className="px-4 py-3 text-[#7a8f80] hidden sm:table-cell">{m.zone || '—'}</td>
                     <td className="px-4 py-3">

@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, Input, Select, Textarea, Modal, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { missionsService, stockService, siteChecklistService, absoluteUploadUrl } from '@/services';
+import { typeLabel } from '@/lib/mission-meta';
 import { FileDropzone } from '@/components/FileDropzone';
 import {
   ArrowLeft, Loader2, FileDown, ShieldCheck, CheckCircle2, XCircle, Lock,
@@ -230,11 +231,11 @@ function Content() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-bold text-[#e8ede9]">{m.clientSite}</h1>
             <Badge className={meta.cls}>{meta.label}</Badge>
-            <Badge className="bg-[#0f9d70]/10 text-[#7a8f80] border-[#1e2e25]">{tpl?.label ?? m.typeTache}</Badge>
+            <Badge className="bg-[#0f9d70]/10 text-[#7a8f80] border-[#1e2e25]">{typeLabel(tpl?.label ?? m.typeTache)}</Badge>
             {m.sonatelDossierNumber && <Badge className="font-mono bg-[#0f9d70]/10 text-[#0f9d70] border-[#0f9d70]/30">#{m.sonatelDossierNumber}</Badge>}
           </div>
           <p className="text-sm text-[#7a8f80] mt-1">
-            {m.typeTache}{m.zone ? ` · ${m.zone}` : ''} · {fmtDate(m.dateMission)}
+            {typeLabel(m.typeTache)}{m.zone ? ` · ${m.zone}` : ''} · {fmtDate(m.dateMission)}
             {m.importMeta?.teamLabel ? ` · ${m.importMeta.teamLabel}` : ''}
             {!clientFinal && ' · sans client final'}
             {m.coper ? ` · COPER ${m.coper}` : ''}
@@ -324,7 +325,7 @@ function Content() {
           <p className="text-xs text-[#7a8f80] mb-3">{tpl?.description ?? '—'}</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
             {[
-              ['Client', m.clientSite], ['Tâche', m.typeTache], ['Zone ops', m.zone ?? '—'],
+              ['Client', m.clientSite], ['Tâche', typeLabel(m.typeTache)], ['Zone ops', m.zone ?? '—'],
               ['Date', fmtDate(m.dateMission)], ['N° dossier', m.sonatelDossierNumber ?? '—'],
               ['Équipe', m.importMeta?.teamLabel ?? m.team?.name ?? '—'],
               ['OLT', m.sonatelOlt ?? '—'], ['Produit', m.sonatelProduit ?? '—'],
