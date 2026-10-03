@@ -8,7 +8,7 @@ import {
   AlertTriangle, Eye, Building2, CreditCard, Activity, TrendingUp,
   Bell, MapPin, Bot, Warehouse, Settings, UserPlus, UserCog, LayoutGrid,
   Upload, ListChecks, Clock, MessageSquare, KeyRound, History, UsersRound,
-  ArrowRightLeft, Wallet, Layers, ShoppingCart, HandCoins,
+  ArrowRightLeft, Wallet, Layers, ShoppingCart, HandCoins, Map,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: React.ReactNode; roles?: string[]; }
@@ -75,6 +75,7 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/rapports', label: 'Rapports', icon: icon(FileText) },
       { href: '/rapports/kpi-sonatel', label: 'KPI SONATEL', icon: icon(Target) },
       { href: '/rapports/performance', label: 'Performance', icon: icon(TrendingUp) },
+      { href: '/cartographie', label: 'Cartographie', icon: icon(Map) },
       { href: '/incidents', label: 'Incidents', icon: icon(AlertTriangle) },
       { href: '/ia-vision', label: 'IA Vision', icon: icon(Eye) },
       { href: '/ia-vision/feedback', label: 'Feedback IA', icon: icon(MessageSquare) },

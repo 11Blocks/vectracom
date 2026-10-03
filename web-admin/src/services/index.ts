@@ -708,6 +708,13 @@ export const payrollService = {
   validate: (id: string) => api.post('/remuneration/' + id + '/valider'),
 };
 
+export const cartographieService = {
+  zones: (period?: string) => api.get('/cartographie/zones' + (period ? '?period=' + period : '')),
+  equipes: (period?: string) => api.get('/cartographie/equipes' + (period ? '?period=' + period : '')),
+  feedback: (teamId?: string) => api.get('/cartographie/feedback' + (teamId ? '?teamId=' + teamId : '')),
+  createFeedback: (data: any) => api.post('/cartographie/feedback', data),
+};
+
 export const renfortsService = {
   list: (status?: string) => api.get('/renforts' + (status ? '?status=' + status : '')),
   get: (id: string) => api.get('/renforts/' + id),
