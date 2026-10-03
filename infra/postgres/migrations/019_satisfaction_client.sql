@@ -19,3 +19,6 @@ CREATE TABLE IF NOT EXISTS client_feedback (
 
 CREATE INDEX IF NOT EXISTS idx_client_feedback_company_team ON client_feedback (company_id, team_id);
 CREATE INDEX IF NOT EXISTS idx_client_feedback_company_mission ON client_feedback (company_id, mission_id);
+
+-- BaseEntity attend created_at + updated_at ; ajout idempotent.
+ALTER TABLE client_feedback ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
