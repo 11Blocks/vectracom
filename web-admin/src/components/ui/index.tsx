@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Loader2, X, Sparkles } from 'lucide-react';
+import { Loader2, X, Sparkles, Check, Plus } from 'lucide-react';
 import { AiModeBadge } from '@/components/AiModeBadge';
 
 /* ═══════════════════════════════════════════════════════════
@@ -72,7 +72,7 @@ export function Button({ variant = 'primary', size = 'md', loading, className, c
         size === 'sm' && 'h-8 px-3 text-xs',
         size === 'md' && 'h-10 px-4 text-sm',
         size === 'lg' && 'h-12 px-6 text-base',
-        size === 'icon' && 'h-10 w-10',
+        size === 'icon' && 'h-8 w-8 p-0',
         className,
       )}
       disabled={disabled || loading}
@@ -81,6 +81,21 @@ export function Button({ variant = 'primary', size = 'md', loading, className, c
       {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
     </button>
+  );
+}
+
+// ToggleActive — bouton de bascule booléen aux couleurs VECTRACOM (coche activée / plus désactivée)
+export function ToggleActive({ checked, onToggle, disabled }: { checked: boolean; onToggle: () => void; disabled?: boolean }) {
+  return (
+    <Button
+      variant={checked ? 'primary' : 'secondary'}
+      size="icon"
+      onClick={onToggle}
+      disabled={disabled}
+      title={checked ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour activer'}
+    >
+      {checked ? <Check size={14} strokeWidth={3} /> : <Plus size={14} />}
+    </Button>
   );
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, EmptyState, StatCard, Modal, Input, Select, Textarea, useToast } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
@@ -53,10 +53,27 @@ function Content() {
   const [family, setFamily] = useState('all');
   const [selected, setSelected] = useState<any>(null);
   const [tcoOpen, setTcoOpen] = useState(false);
+  const [autoPicked, setAutoPicked] = useState(false);
 
   const { data: dash, loading, refetch } = useQuery(() => kpiService.dashboard(period), [period]);
   const { data: history } = useQuery(() => kpiService.history(), []);
   const { data: plans, refetch: refetchPlans } = useQuery(() => kpiService.masteryPlans(period), [period]);
+
+  // Si le mois courant n'a pas encore de KPI (début de mois), basculer
+  // automatiquement sur le dernier mois qui a des données — sinon la liste
+  // semble « vide » alors que les KPI du mois précédent sont intacts.
+  useEffect(() => {
+    if (autoPicked) return;
+    const months = (history as any)?.months ?? [];
+    if (months.length === 0) return;
+    const current = new Date().toISOString().slice(0, 7);
+    const currentHasData = months.some((m: any) => m.month === current && (m.atteints + m.nonAtteints) > 0);
+    if (currentHasData) { setAutoPicked(true); return; }
+    const latest = [...months]
+      .sort((a: any, b: any) => b.month.localeCompare(a.month))
+      .find((m: any) => (m.atteints + m.nonAtteints) > 0);
+    if (latest) { setPeriod(latest.month); setAutoPicked(true); }
+  }, [history, autoPicked]);
 
   const recalcMut = useMutation(() => kpiService.recalculate(period), {
     onSuccess: () => { toast({ title: 'KPI recalculés', variant: 'success' }); refetch(); },

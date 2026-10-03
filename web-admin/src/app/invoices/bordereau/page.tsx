@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Modal, Input, Select, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Modal, Input, Select, ConfirmDialog, useToast, ToggleActive } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { useSessionUser } from '@/components/admin/TenantPicker';
 import { priceItemsService } from '@/services';
@@ -151,8 +151,7 @@ function Content() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <input type="checkbox" checked={!!p.isActive} disabled={!isAdmin || updateMut.loading}
-                        onChange={e => updateMut.mutate(p.itemNumber, { isActive: e.target.checked })} />
+                      <ToggleActive checked={!!p.isActive} disabled={!isAdmin || updateMut.loading} onToggle={() => updateMut.mutate(p.itemNumber, { isActive: !p.isActive })} />
                     </td>
                     {isAdmin && (
                       <td className="px-2 py-2 text-right">

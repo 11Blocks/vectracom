@@ -80,3 +80,30 @@
   outline: 2px solid #0f9d70;
   outline-offset: 2px;
 }
+
+/* ── Sélecteurs de date / mois — rendu sombre cohérent ──
+   Sans `color-scheme: dark`, les champs natifs (date, month, time)
+   affichent texte + icône calendrier en NOIR sur fond sombre = invisibles. */
+input[type="date"],
+input[type="month"],
+input[type="time"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.75) sepia(0.15) saturate(2.2) hue-rotate(120deg);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+/* Le champ date/month désactivé reste lisible */
+input[type="date"]:disabled,
+input[type="month"]:disabled {
+  color: #7a8f80;
+  -webkit-text-fill-color: #7a8f80;
+  opacity: 0.7;
+}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
-import { Button, Badge, Card, Skeleton, Input, Textarea, useToast } from '@/components/ui';
+import { Button, Badge, Card, Skeleton, Input, Textarea, useToast, ToggleActive } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { hrService, techniciansService } from '@/services';
 import { useSessionUser } from '@/components/admin/TenantPicker';
@@ -221,20 +221,7 @@ function Content() {
                     </td>
                     {DAYS.map(d => (
                       <td key={d.key} className="px-2 py-2.5 text-center">
-                        <button
-                          onClick={() => toggle(tech.id, d.key)}
-                          disabled={validated || !canWrite}
-                          title={days[d.key] ? 'Présent — cliquer pour retirer' : 'Absent — cliquer pour cocher'}
-                          className={
-                            'h-7 w-7 rounded-md border transition-all flex items-center justify-center ' +
-                            (days[d.key]
-                              ? 'bg-[#0f9d70] border-[#0f9d70] text-white hover:bg-[#0c8f60]'
-                              : 'bg-[#0a0f0d] border-[#1e2e25] text-transparent hover:border-[#0f9d70]/50') +
-                            (validated ? ' opacity-50 cursor-not-allowed' : '')
-                          }
-                        >
-                          <Check size={14} strokeWidth={3} />
-                        </button>
+                        <ToggleActive checked={days[d.key]} disabled={validated || !canWrite} onToggle={() => toggle(tech.id, d.key)} />
                       </td>
                     ))}
                     <td className="px-3 py-2.5 text-center">
