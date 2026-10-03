@@ -59,8 +59,8 @@ function Content() {
   const fmtFCFA = (n: any) => n !== null && n !== undefined ? Number(n).toLocaleString('fr-FR') + ' FCFA' : '—';
 
   const kpiCards = [
-    { label: 'Missions du jour', value: todayCount, icon: <ClipboardCheck size={18} />, variant: 'success' as const, onClick: () => router.push('/missions') },
-    { label: 'En retard', value: lateCount, icon: <AlertTriangle size={18} />, variant: (lateCount > 0 ? 'danger' : 'default') as any, onClick: () => router.push('/missions') },
+    { label: 'Missions du jour (OT)', value: todayCount, icon: <ClipboardCheck size={18} />, variant: 'success' as const, onClick: () => router.push('/missions') },
+    { label: 'Backlog', value: lateCount, icon: <AlertTriangle size={18} />, variant: (lateCount > 0 ? 'danger' : 'default') as any, onClick: () => router.push('/missions') },
     { label: 'En attente validation', value: pendingCount, icon: <Clock size={18} />, variant: (pendingCount > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/missions') },
     { label: 'Stock faible', value: lowStockCount, icon: <Package size={18} />, variant: (lowStockCount > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/stock') },
     { label: 'Véhicules à contrôler', value: vehiclesToCheck, icon: <Truck size={18} />, variant: (vehiclesToCheck > 0 ? 'warning' : 'default') as any, onClick: () => router.push('/vehicles') },

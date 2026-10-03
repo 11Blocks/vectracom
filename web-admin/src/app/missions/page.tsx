@@ -7,7 +7,7 @@ import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast
 import { useQuery, useMutation } from '@/hooks/use-query';
 import { useDebounced } from '@/hooks/use-debounced';
 import { missionsService, teamsService, techniciansService, vehiclesService, partnersService } from '@/services';
-import { STATUS_META, typeMeta, statusMeta } from '@/lib/mission-meta';
+import { STATUS_META, typeMeta, typeLabel, statusMeta } from '@/lib/mission-meta';
 import { downloadCsv } from '@/lib/csv';
 import { ClipboardCheck, Plus, Search, Loader2, ArrowRight, MapPin, CheckCircle2, XCircle, UsersRound, Edit, Trash2, RotateCcw, Ban, Download, X } from 'lucide-react';
 
@@ -242,7 +242,7 @@ function Content() {
                     )}
                     <td className="px-4 py-3 font-mono text-xs text-[#0f9d70]">{m.sonatelDossierNumber ?? '—'}</td>
                     <td className="px-4 py-3 font-medium text-[#e8ede9] max-w-44 truncate">{m.clientSite}</td>
-                    <td className="px-4 py-3"><Badge className={typeMeta(m.typeTache).cls}>{m.typeTache}</Badge></td>
+                    <td className="px-4 py-3"><Badge className={typeMeta(m.typeTache).cls}>{typeLabel(m.typeTache)}</Badge></td>
                     <td className="px-4 py-3 text-[#7a8f80]"><span className="inline-flex items-center gap-1"><MapPin size={12} className="text-[#7a8f80]/60" />{m.zone ?? '—'}</span></td>
                     <td className="px-4 py-3 font-mono text-[11px] text-[#5b8def]/80" title="SR / Plaque SONATEL">{m.srPlaque ?? '—'}</td>
                     <td className={'px-4 py-3 tabular-nums ' + (m.ageDays > 7 ? 'text-[#C0392B]' : m.ageDays > 3 ? 'text-[#D9822B]' : 'text-[#7a8f80]')} title="Ancienneté de la demande">{m.ageDays != null ? `${m.ageDays} j` : '—'}</td>

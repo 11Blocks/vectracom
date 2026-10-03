@@ -36,3 +36,12 @@ export function statusMeta(status: string) {
 export function typeMeta(type: string) {
   return TYPE_META[type] ?? { cls: 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]', dot: '#7a8f80' };
 }
+
+/**
+ * Libellé d'affichage du type de mission : suffixe « -OT » (Ordre de Travail).
+ * Affichage uniquement — ne modifie pas la clé métier typeTache (KPI/facturation).
+ */
+export function typeLabel(type: string | null | undefined): string {
+  if (!type) return '—';
+  return `${type}-OT`;
+}
