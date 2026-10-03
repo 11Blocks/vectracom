@@ -13,6 +13,7 @@ export const MOVEMENT_TYPES = [
   'ajustement',
   'retour',
   'sortie_feraillerie',
+  'perte',
 ] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 

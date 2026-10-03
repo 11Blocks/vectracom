@@ -26,6 +26,8 @@ const REQUIREMENTS: Record<MovementType, { from: boolean; to: boolean }> = {
   retour: { from: false, to: true },
   // Sortie ferraillerie : matériel hors d'usage quitte le stock (dépôt → hors).
   sortie_feraillerie: { from: true, to: false },
+  // Perte / casse constatée : sort du dépôt sans destination (traçabilité sanction).
+  perte: { from: true, to: false },
 };
 
 /** Un chef d'équipe déclare ce qui se passe sur le terrain, jamais les entrées ni les corrections. */

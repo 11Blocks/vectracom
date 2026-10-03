@@ -694,6 +694,14 @@ export const itemsService = {
   update: (id: string, data: any) => api.put('/items/' + id, data),
 };
 
+export const purchasesService = {
+  list: (status?: string) => api.get('/stock-purchases' + (status ? '?status=' + status : '')),
+  pertes: () => api.get('/stock-purchases/pertes'),
+  create: (data: any) => api.post('/stock-purchases', data),
+  update: (id: string, data: any) => api.put('/stock-purchases/' + id, data),
+  setStatus: (id: string, status: string) => api.post('/stock-purchases/' + id + '/status', { status }),
+};
+
 export const renfortsService = {
   list: (status?: string) => api.get('/renforts' + (status ? '?status=' + status : '')),
   get: (id: string) => api.get('/renforts/' + id),

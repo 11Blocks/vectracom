@@ -8,7 +8,7 @@ import {
   AlertTriangle, Eye, Building2, CreditCard, Activity, TrendingUp,
   Bell, MapPin, Bot, Warehouse, Settings, UserPlus, UserCog, LayoutGrid,
   Upload, ListChecks, Clock, MessageSquare, KeyRound, History, UsersRound,
-  ArrowRightLeft, Wallet, Layers,
+  ArrowRightLeft, Wallet, Layers, ShoppingCart,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: React.ReactNode; roles?: string[]; }
@@ -49,6 +49,7 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/partenaires', label: 'Partenaires', icon: icon(Building2) },
       { href: '/stock', label: 'Stock', icon: icon(Package) },
       { href: '/stock/warehouses', label: 'Dépôts', icon: icon(Warehouse) },
+      { href: '/achats-sonatel', label: 'Achats SONATEL', icon: icon(ShoppingCart) },
       { href: '/vehicles', label: 'Véhicules', icon: icon(Truck) },
       { href: '/geolocation', label: 'Géolocalisation', icon: icon(MapPin) },
       { href: '/renforts', label: 'Renforts', icon: icon(ArrowRightLeft) },
