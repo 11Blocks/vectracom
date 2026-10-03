@@ -180,6 +180,14 @@ export class Mission extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   importSource: string | null;
 
+  /** Mission ajoutée manuellement (rajout hors planning importé). */
+  @Column({ default: false })
+  rajout!: boolean;
+
+  /** Date de levée du motif de blocage (reprogrammation). */
+  @Column({ type: 'timestamptz', nullable: true })
+  blocageLeveAt: Date | null;
+
   // ----- Exécution terrain (Phase 3) -----
   @Column({ type: 'timestamptz', nullable: true })
   heureDepartReelle: Date | null;

@@ -11,7 +11,7 @@ import { STATUS_META, typeMeta, typeLabel, statusMeta } from '@/lib/mission-meta
 import { reportsService } from '@/services';
 import {
   CalendarDays, Upload, ChevronLeft, ChevronRight, Table as TableIcon, LayoutGrid,
-  MapPin, ArrowRight, Loader2, CalendarRange, FileDown, FileSpreadsheet, Sun, AlertTriangle,
+  MapPin, ArrowRight, Loader2, CalendarRange, FileDown, FileSpreadsheet, Sun, AlertTriangle, Plus,
 } from 'lucide-react';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -93,7 +93,12 @@ function Content() {
     },
   );
   const missions = Array.isArray(data) ? data : [];
-  const visibleMissions = statusFilter === '__SURCH__' ? missions.filter((m: any) => m.surcharge) : missions;
+  const visibleMissions = (() => {
+    if (statusFilter === '__SURCH__') return missions.filter((m: any) => m.surcharge);
+    if (statusFilter === '__RAJOUT__') return missions.filter((m: any) => m.rajout);
+    if (statusFilter === '__BLOCAGE__') return missions.filter((m: any) => m.blocageMotif);
+    return missions;
+  })();
 
   const byDay = new Map<string, any[]>();
   for (const m of visibleMissions) {
@@ -219,6 +224,26 @@ function Content() {
             </button>
           );
         })()}
+        {(() => {
+          const rajouts = missions.filter((m: any) => m.rajout).length;
+          if (!rajouts) return null;
+          return (
+            <button onClick={() => setStatusFilter(statusFilter === '__RAJOUT__' ? '' : '__RAJOUT__')}
+              className={'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ' + (statusFilter === '__RAJOUT__' ? 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/40' : 'bg-[#0f9d70]/10 text-[#0f9d70] border-[#0f9d70]/30 opacity-80 hover:opacity-100')}>
+              <Plus size={11} /> Rajouts · {rajouts}
+            </button>
+          );
+        })()}
+        {(() => {
+          const bloques = missions.filter((m: any) => m.blocageMotif).length;
+          if (!bloques) return null;
+          return (
+            <button onClick={() => setStatusFilter(statusFilter === '__BLOCAGE__' ? '' : '__BLOCAGE__')}
+              className={'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ' + (statusFilter === '__BLOCAGE__' ? 'bg-[#C0392B]/20 text-[#C0392B] border-[#C0392B]/40' : 'bg-[#C0392B]/10 text-[#C0392B] border-[#C0392B]/30 opacity-80 hover:opacity-100')}>
+              <AlertTriangle size={11} /> Blocages · {bloques}
+            </button>
+          );
+        })()}
         {Object.entries(STATUS_META).map(([k, v]) => {
           const count = missions.filter((m: any) => m.status === k).length;
           if (!count) return null;
@@ -263,7 +288,14 @@ function Content() {
                   return (
                     <tr key={m.id} className="hover:bg-[#172019] transition-colors cursor-pointer" onClick={() => router.push('/missions/' + m.id)}>
                       <td className="px-4 py-3 font-mono text-xs text-[#0f9d70]">{m.sonatelDossierNumber ?? '—'}</td>
-                      <td className="px-4 py-3 font-medium text-[#e8ede9] max-w-44 truncate">{m.clientSite}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-[#e8ede9] max-w-44 truncate">{m.clientSite}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {m.rajout && <Badge className="bg-[#0f9d70]/15 text-[#0f9d70] border-[#0f9d70]/30 text-[9px]">RAJOUT</Badge>}
+                          {m.blocageMotif && <Badge className="bg-[#C0392B]/15 text-[#C0392B] border-[#C0392B]/30 text-[9px]">BLOQUÉ</Badge>}
+                          {m.surcharge && <Badge className="bg-[#D9822B]/15 text-[#D9822B] border-[#D9822B]/30 text-[9px]">SURCH</Badge>}
+                        </div>
+                      </td>
                       <td className="px-4 py-3"><span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border ' + typeMeta(m.typeTache).cls}>{typeLabel(m.typeTache)}</span></td>
                       <td className="px-4 py-3 text-[#7a8f80]"><span className="inline-flex items-center gap-1"><MapPin size={12} className="text-[#7a8f80]/60" />{m.zone ?? '—'}</span></td>
                       <td className="px-4 py-3 text-[#7a8f80] whitespace-nowrap">{fmtDate(m.dateMission)}</td>

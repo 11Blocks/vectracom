@@ -56,6 +56,7 @@ export const missionsService = {
     api.post('/missions/bulk-status', { ids, status, ...(reason ? { reason } : {}) }),
   reassign: (id: string, data: { teamId?: string | null; technicianIds?: string[]; vehicleId?: string | null; dateMission?: string }) => api.put('/missions/' + id, data),
   updateDetails: (id: string, data: Record<string, unknown>) => api.put('/missions/' + id + '/details', data),
+  leverBlocage: (id: string, dateMission?: string) => api.post('/missions/' + id + '/lever-blocage', { dateMission }),
   remove: (id: string) => api.delete('/missions/' + id),
   saveStep: (id: string, stepId: number | 'data', body: any) => api.post(`/missions/${id}/field-report/step/${stepId}`, { ['step' + stepId]: body }),
   saveStepData: (id: string, data: Record<string, unknown>, priceItemsUsed?: any[]) =>

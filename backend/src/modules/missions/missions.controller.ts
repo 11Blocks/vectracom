@@ -20,6 +20,7 @@ import type { Response } from 'express';
 import {
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   Max,
@@ -84,8 +85,14 @@ class ListMissionsQueryDto {
   @IsOptional() @IsString() zone?: string;
   @IsOptional() @IsString() search?: string;
   @IsOptional() @IsIn(['true', 'false']) invoiced?: string;
+  @IsOptional() @IsIn(['true', 'false']) rajout?: string;
+  @IsOptional() @IsIn(['true', 'false']) hasBlocage?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5000) limit?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) offset?: number;
+}
+
+class LeverBlocageDto {
+  @IsOptional() @IsISO8601() dateMission?: string;
 }
 
 @Controller('missions')
@@ -171,6 +178,20 @@ export class MissionsController {
   ) {
     this.requireTenant(companyId);
     return this.missionsService.setStatus(companyId!, id, dto, role, userId);
+  }
+
+  /** Lève le motif de blocage d'une mission et la reprogramme (blocage levé). */
+  @Post(':id/lever-blocage')
+  @HttpCode(200)
+  @Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE)
+  leverBlocage(
+    @CurrentUser('companyId') companyId: string | null,
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: LeverBlocageDto,
+  ) {
+    this.requireTenant(companyId);
+    return this.missionsService.leverBlocage(companyId!, id, dto.dateMission, userId);
   }
 
   /** Validation / rejet / annulation en masse (refus renvoyés mission par mission). */

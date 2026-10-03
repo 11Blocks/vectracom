@@ -77,6 +77,8 @@ export class MissionsService {
       vaCap: dto.vaCap ?? null,
       piloteSonatel: dto.piloteSonatel ?? null,
       codeOperation: dto.codeOperation ?? null,
+      // Toute création manuelle (hors import SONATEL) est un « rajout ».
+      rajout: true,
     });
     return this.missionRepository.save(mission);
   }
@@ -93,6 +95,8 @@ export class MissionsService {
       zone?: string;
       search?: string;
       invoiced?: string;
+      rajout?: string;
+      hasBlocage?: string;
       limit?: number;
       offset?: number;
     },
@@ -121,6 +125,9 @@ export class MissionsService {
     }
     if (filters.invoiced === 'true') qb.andWhere('mission.invoice_id IS NOT NULL');
     if (filters.invoiced === 'false') qb.andWhere('mission.invoice_id IS NULL');
+    if (filters.rajout === 'true') qb.andWhere('mission.rajout = true');
+    if (filters.rajout === 'false') qb.andWhere('mission.rajout = false');
+    if (filters.hasBlocage === 'true') qb.andWhere('mission.blocage_motif IS NOT NULL');
 
     return qb.getManyAndCount();
   }
@@ -368,6 +375,32 @@ export class MissionsService {
     if (dto.piloteSonatel !== undefined) mission.piloteSonatel = dto.piloteSonatel;
     if (dto.codeOperation !== undefined) mission.codeOperation = dto.codeOperation;
     return this.missionRepository.save(mission);
+  }
+
+  /**
+   * Lève le motif de blocage d'une mission et la reprogramme :
+   * efface blocageMotif/blocageCode, horodate la levée, repasse en « planifiee »
+   * et repositionne la date si fournie. Réouverture autorisée (rejet/annulation
+   * liés au blocage sont effacés).
+   */
+  async leverBlocage(companyId: string, id: string, dateMission?: string, userId: string | null = null): Promise<Mission> {
+    const mission = await this.findOne(companyId, id);
+    if (mission.invoiceId) throw new BadRequestException('Mission déjà facturée — levée de blocage impossible');
+    mission.blocageMotif = null;
+    mission.blocageCode = null;
+    mission.blocageLeveAt = new Date();
+    if (dateMission) mission.dateMission = new Date(dateMission);
+    mission.status = 'planifiee';
+    mission.rejectionReason = null;
+    mission.rejectedAt = null;
+    mission.cancelReason = null;
+    mission.cancelledAt = null;
+    await this.missionRepository.save(mission);
+    await this.audit.log({
+      companyId, actorId: userId, action: 'mission.blocage-leve', entityType: 'mission', entityId: id,
+      payload: { dateMission: mission.dateMission.toISOString() },
+    });
+    return mission;
   }
 
   async remove(companyId: string, id: string, userId: string | null = null) {

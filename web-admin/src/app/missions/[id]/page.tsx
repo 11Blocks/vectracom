@@ -172,6 +172,21 @@ function Content() {
     },
   );
 
+  // ----- Levée de blocage → reprogrammation (fin L2) -----
+  const [leverOpen, setLeverOpen] = useState(false);
+  const [leverDate, setLeverDate] = useState('');
+  const leverMut = useMutation(
+    (date?: string) => missionsService.leverBlocage(String(id), date),
+    {
+      onSuccess: () => { toast({ title: 'Blocage levé — mission reprogrammée', variant: 'success' }); setLeverOpen(false); refetch(); },
+      onError: (e: any) => toast({ title: 'Levée impossible', description: e.message, variant: 'error' }),
+    },
+  );
+  const openLever = () => {
+    setLeverDate(m?.dateMission ? new Date(m.dateMission).toISOString().slice(0, 10) : '');
+    setLeverOpen(true);
+  };
+
   const downloadPv = async () => {
     try {
       const blob = await missionsService.pvRecette(String(id));
@@ -265,6 +280,11 @@ function Content() {
               {statusMut.loading ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />} Rouvrir (planifiée)
             </Button>
           )}
+          {m.blocageMotif && !m.invoiceId && (
+            <Button variant="outline" onClick={openLever} title="Lever le motif de blocage et reprogrammer la mission">
+              <Check size={14} /> Lever le blocage
+            </Button>
+          )}
           {isAdmin && m.status === 'validee' && !m.invoiceId && (
             <Button variant="outline" onClick={() => setReasonAction('devalider')} disabled={statusMut.loading} title="Repasse la mission en « terminée » (admin uniquement)">
               <XCircle size={14} /> Dé-valider
@@ -296,6 +316,17 @@ function Content() {
           {m.cancelReason && <p className="text-[#e8ede9] mt-1 whitespace-pre-line">{m.cancelReason}</p>}
         </div>
       )}
+      {m.blocageMotif && (
+        <div className="rounded-lg border border-[#C0392B]/40 bg-[#C0392B]/10 p-3 text-sm flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-[#C0392B] flex items-center gap-1.5"><AlertTriangle size={14} /> Mission bloquée</p>
+            <p className="text-[#e8ede9] mt-1">{m.blocageMotif}{m.blocageCode ? ` (${m.blocageCode})` : ''}</p>
+          </div>
+          {!m.invoiceId && (
+            <Button size="sm" onClick={openLever} className="shrink-0"><Check size={13} /> Lever & reprogrammer</Button>
+          )}
+        </div>
+      )}
       {m.invoiceId && (
         <div className="rounded-lg border border-[#5b8def]/40 bg-[#5b8def]/10 p-3 text-sm flex items-center justify-between gap-2">
           <p className="text-[#5b8def] flex items-center gap-1.5"><Lock size={14} /> Mission facturée — statut et rapport verrouillés.</p>
@@ -316,6 +347,21 @@ function Content() {
             </div>
           </form>
         )}
+      </Modal>
+
+      <Modal open={leverOpen} onClose={() => setLeverOpen(false)} title="Lever le blocage & reprogrammer" size="sm">
+        <form className="space-y-3" onSubmit={e => { e.preventDefault(); leverMut.mutate(leverDate || undefined); }}>
+          <p className="text-sm text-[#7a8f80]">
+            La mission repassera en <b className="text-[#e8ede9]">planifiée</b> et le motif de blocage sera effacé.
+          </p>
+          <Input label="Nouvelle date de mission" type="date" value={leverDate} onChange={e => setLeverDate(e.target.value)} />
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="secondary" onClick={() => setLeverOpen(false)}>Annuler</Button>
+            <Button type="submit" disabled={leverMut.loading}>
+              {leverMut.loading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Lever le blocage
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* ── Infos + workflow ── */}
