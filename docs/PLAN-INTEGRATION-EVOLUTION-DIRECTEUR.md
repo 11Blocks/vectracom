@@ -115,3 +115,11 @@ Colonnes :  Zones/Équipes   |   Pilotes   |   Instances
 - Modules + endpoints : `/items`, `/zones`, `/pilotes`, `/pricing-rules`.
 - Seeds : `seed-items.ts` (6 domaines), `seed-zones-pilotes.ts`.
 - BTS ajouté aux `MISSION_TYPES`.
+
+## 12. Statut L1 → L3 (implémenté le 03/10/2026)
+
+| Lot | Contenu | Vérifié |
+|---|---|---|
+| **L1** | normalisation `type_tache` (backfill 1043) + suffixe « -OT » + label Backlog | endpoints + UI |
+| **L2** | permanence (rotation SAV/PROD) + filtres Tech/Zone + rajouts (`rajout=true` à la création manuelle) + blocages levés (`POST /missions/:id/lever-blocage` → reprogrammation) | 110 créneaux, 57 blocages filtrables, lever-blocage testé |
+| **L3** | renforts zone→zone (`/renforts`, perdiem/jour/membre + coût calculé) + frais de mission (`/mission-expenses`, carburant/repas/logement/perdiem/autre + synthèse) | CRUD testé, coût = jours × membres × perdiem |
