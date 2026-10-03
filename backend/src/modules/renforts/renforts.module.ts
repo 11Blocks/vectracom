@@ -41,46 +41,6 @@ class RenfortStatusDto {
   @IsIn(RENFORT_STATUSES as unknown as string[]) status!: string;
 }
 
-@Controller('renforts')
-@Roles(UserRole.ADMIN, UserRole.DIRECTION)
-export class RenfortsController {
-  constructor(private readonly svc: RenfortsService) {}
-
-  @Get()
-  list(@CurrentUser('companyId') companyId: string | null, @Query('status') status?: string) {
-    this.requireTenant(companyId);
-    return this.svc.list(companyId!, status);
-  }
-
-  @Get(':id')
-  findOne(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
-    this.requireTenant(companyId);
-    return this.svc.findOne(companyId!, id);
-  }
-
-  @Post()
-  create(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateRenfortDto) {
-    this.requireTenant(companyId);
-    return this.svc.create(companyId!, dto);
-  }
-
-  @Put(':id')
-  update(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: UpdateRenfortDto) {
-    this.requireTenant(companyId);
-    return this.svc.update(companyId!, id, dto);
-  }
-
-  @Post(':id/status')
-  setStatus(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: RenfortStatusDto) {
-    this.requireTenant(companyId);
-    return this.svc.setStatus(companyId!, id, dto.status as RenfortStatus);
-  }
-
-  private requireTenant(companyId: string | null): void {
-    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
-  }
-}
-
 class RenfortsService {
   constructor(@InjectRepository(Renfort) private readonly repo: Repository<Renfort>) {}
 
@@ -196,6 +156,46 @@ class RenfortsService {
     if (!renfort) throw new NotFoundException('Renfort introuvable');
     renfort.status = status;
     return this.repo.save(renfort);
+  }
+}
+
+@Controller('renforts')
+@Roles(UserRole.ADMIN, UserRole.DIRECTION)
+export class RenfortsController {
+  constructor(private readonly svc: RenfortsService) {}
+
+  @Get()
+  list(@CurrentUser('companyId') companyId: string | null, @Query('status') status?: string) {
+    this.requireTenant(companyId);
+    return this.svc.list(companyId!, status);
+  }
+
+  @Get(':id')
+  findOne(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+    this.requireTenant(companyId);
+    return this.svc.findOne(companyId!, id);
+  }
+
+  @Post()
+  create(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateRenfortDto) {
+    this.requireTenant(companyId);
+    return this.svc.create(companyId!, dto);
+  }
+
+  @Put(':id')
+  update(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: UpdateRenfortDto) {
+    this.requireTenant(companyId);
+    return this.svc.update(companyId!, id, dto);
+  }
+
+  @Post(':id/status')
+  setStatus(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: RenfortStatusDto) {
+    this.requireTenant(companyId);
+    return this.svc.setStatus(companyId!, id, dto.status as RenfortStatus);
+  }
+
+  private requireTenant(companyId: string | null): void {
+    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
   }
 }
 

@@ -36,52 +36,6 @@ class UpdateExpenseDto {
   @IsOptional() @IsString() note?: string | null;
 }
 
-@Controller('expenses')
-@Roles(UserRole.ADMIN, UserRole.DIRECTION)
-export class ExpensesController {
-  constructor(private readonly svc: ExpensesService) {}
-
-  @Get()
-  list(
-    @CurrentUser('companyId') companyId: string | null,
-    @Query('type') type?: string,
-    @Query('teamId') teamId?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    this.requireTenant(companyId);
-    return this.svc.list(companyId!, { type, teamId, from, to });
-  }
-
-  @Get('summary')
-  summary(@CurrentUser('companyId') companyId: string | null, @Query('from') from?: string, @Query('to') to?: string) {
-    this.requireTenant(companyId);
-    return this.svc.summary(companyId!, from, to);
-  }
-
-  @Post()
-  create(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Body() dto: CreateExpenseDto) {
-    this.requireTenant(companyId);
-    return this.svc.create(companyId!, dto, userId);
-  }
-
-  @Put(':id')
-  update(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: UpdateExpenseDto) {
-    this.requireTenant(companyId);
-    return this.svc.update(companyId!, id, dto);
-  }
-
-  @Delete(':id')
-  remove(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
-    this.requireTenant(companyId);
-    return this.svc.remove(companyId!, id);
-  }
-
-  private requireTenant(companyId: string | null): void {
-    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
-  }
-}
-
 class ExpensesService {
   constructor(@InjectRepository(MissionExpense) private readonly repo: Repository<MissionExpense>) {}
 
@@ -167,6 +121,52 @@ class ExpensesService {
     if (!e) throw new NotFoundException('Frais introuvable');
     await this.repo.remove(e);
     return { deleted: true };
+  }
+}
+
+@Controller('expenses')
+@Roles(UserRole.ADMIN, UserRole.DIRECTION)
+export class ExpensesController {
+  constructor(private readonly svc: ExpensesService) {}
+
+  @Get()
+  list(
+    @CurrentUser('companyId') companyId: string | null,
+    @Query('type') type?: string,
+    @Query('teamId') teamId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    this.requireTenant(companyId);
+    return this.svc.list(companyId!, { type, teamId, from, to });
+  }
+
+  @Get('summary')
+  summary(@CurrentUser('companyId') companyId: string | null, @Query('from') from?: string, @Query('to') to?: string) {
+    this.requireTenant(companyId);
+    return this.svc.summary(companyId!, from, to);
+  }
+
+  @Post()
+  create(@CurrentUser('companyId') companyId: string | null, @CurrentUser('id') userId: string, @Body() dto: CreateExpenseDto) {
+    this.requireTenant(companyId);
+    return this.svc.create(companyId!, dto, userId);
+  }
+
+  @Put(':id')
+  update(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: UpdateExpenseDto) {
+    this.requireTenant(companyId);
+    return this.svc.update(companyId!, id, dto);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string) {
+    this.requireTenant(companyId);
+    return this.svc.remove(companyId!, id);
+  }
+
+  private requireTenant(companyId: string | null): void {
+    if (!companyId) throw new BadRequestException('Réservé aux comptes rattachés à un tenant');
   }
 }
 
