@@ -90,6 +90,7 @@ export class MissionsService {
       to?: string;
       status?: string;
       typeTache?: string;
+      zone?: string;
       search?: string;
       invoiced?: string;
       limit?: number;
@@ -111,6 +112,7 @@ export class MissionsService {
     if (filters.to) qb.andWhere('mission.date_mission <= :to', { to: filters.to });
     if (filters.status) qb.andWhere('mission.status = :status', { status: filters.status });
     if (filters.typeTache) qb.andWhere('mission.type_tache = :type', { type: filters.typeTache });
+    if (filters.zone) qb.andWhere('mission.zone ILIKE :zone', { zone: filters.zone });
     if (filters.search?.trim()) {
       qb.andWhere(
         '(mission.client_site ILIKE :q OR mission.sonatel_dossier_number ILIKE :q OR mission.zone ILIKE :q OR team.name ILIKE :q)',

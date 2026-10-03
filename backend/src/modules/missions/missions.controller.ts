@@ -81,6 +81,7 @@ class ListMissionsQueryDto {
   @IsOptional() @IsString() to?: string;
   @IsOptional() @IsString() @IsIn(MISSION_STATUSES as unknown as string[]) status?: string;
   @IsOptional() @IsString() typeTache?: string;
+  @IsOptional() @IsString() zone?: string;
   @IsOptional() @IsString() search?: string;
   @IsOptional() @IsIn(['true', 'false']) invoiced?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5000) limit?: number;

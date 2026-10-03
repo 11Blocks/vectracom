@@ -29,14 +29,16 @@ function Content() {
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [zoneFilter, setZoneFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
 
   const q = useDebounced(search.trim());
-  const pager = usePagination(50, `${statusFilter}|${q}`);
+  const zoneQ = useDebounced(zoneFilter.trim());
+  const pager = usePagination(50, `${statusFilter}|${q}|${zoneQ}`);
 
   const { data, loading, refetch: refetchPage } = useQuery(
-    () => missionsService.page({ status: statusFilter || undefined, search: q || undefined, ...pager.params }),
-    [statusFilter, q, pager.offset, pager.limit],
+    () => missionsService.page({ status: statusFilter || undefined, search: q || undefined, zone: zoneQ || undefined, ...pager.params }),
+    [statusFilter, q, zoneQ, pager.offset, pager.limit],
   );
   const { data: counts, refetch: refetchCounts } = useQuery(() => missionsService.statusCounts(q || undefined), [q]);
   const refetch = async () => { await Promise.all([refetchPage(), refetchCounts()]); };
@@ -169,6 +171,13 @@ function Content() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8f80]" />
         <input type="text" placeholder="Rechercher (client, dossier, zone…)" value={search} onChange={e => setSearch(e.target.value)}
           className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] placeholder:text-[#7a8f80] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50" />
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="relative w-44">
+          <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8f80]" />
+          <input type="text" placeholder="Zone (Mbour…)" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}
+            className="w-full h-9 pl-8 pr-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] placeholder:text-[#7a8f80] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50" />
+        </div>
       </div>
 
       {canDecide && selected.size > 0 && (
