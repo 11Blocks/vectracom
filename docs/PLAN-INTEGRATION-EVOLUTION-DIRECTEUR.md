@@ -123,3 +123,4 @@ Colonnes :  Zones/Équipes   |   Pilotes   |   Instances
 | **L1** | normalisation `type_tache` (backfill 1043) + suffixe « -OT » + label Backlog | endpoints + UI |
 | **L2** | permanence (rotation SAV/PROD) + filtres Tech/Zone + rajouts (`rajout=true` à la création manuelle) + blocages levés (`POST /missions/:id/lever-blocage` → reprogrammation) | 110 créneaux, 57 blocages filtrables, lever-blocage testé |
 | **L3** | renforts zone→zone (`/renforts`, perdiem/jour/membre + coût calculé) + frais de mission (`/mission-expenses`, carburant/repas/logement/perdiem/autre + synthèse) | CRUD testé, coût = jours × membres × perdiem |
+| **L4** | composition d'équipe par Item (page `/items`, onglet par domaine, composition éditable) + enrichissement technicien (fonction, item, zone, dossier CNI/CV/diplôme) | 6 items aux compositions exactes (DÉPLOIEMENT = 2 tireurs+1 raccordeur+4 journaliers), update technicien testé |
