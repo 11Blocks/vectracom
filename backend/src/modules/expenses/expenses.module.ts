@@ -124,7 +124,7 @@ class ExpensesService {
   }
 }
 
-@Controller('expenses')
+@Controller('mission-expenses')
 @Roles(UserRole.ADMIN, UserRole.DIRECTION)
 export class ExpensesController {
   constructor(private readonly svc: ExpensesService) {}

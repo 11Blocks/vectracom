@@ -697,11 +697,11 @@ export const renfortsService = {
 };
 
 export const expensesService = {
-  list: (params?: Record<string, string>) => api.get('/expenses' + qs(params)),
-  summary: (from?: string, to?: string) => api.get('/expenses/summary' + qs({ from, to })),
-  create: (data: any) => api.post('/expenses', data),
-  update: (id: string, data: any) => api.put('/expenses/' + id, data),
-  remove: (id: string) => api.delete('/expenses/' + id),
+  list: (params?: Record<string, string>) => api.get('/mission-expenses' + qs(params)),
+  summary: (from?: string, to?: string) => api.get('/mission-expenses/summary' + qs({ from, to })),
+  create: (data: any) => api.post('/mission-expenses', data),
+  update: (id: string, data: any) => api.put('/mission-expenses/' + id, data),
+  remove: (id: string) => api.delete('/mission-expenses/' + id),
 };
 
 // ═══════════════════════════════════════════════════════════
