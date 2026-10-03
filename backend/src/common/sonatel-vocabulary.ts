@@ -61,3 +61,31 @@ export function classifyBlocage(text: string): { motif: string | null; label: st
   }
   return { motif: null, label: null };
 }
+
+/**
+ * Normalise une « Tâche » brute SONATEL (colonne Tâches du Planning global) →
+ * type de mission normalisé (12 types). Corrige la multiplicité d'orthographes
+ * constatée en base (« Survey + Installation », « Survey+Installation »,
+ * « Survey+installation »…) qui casse les KPI et la facturation.
+ * Retourne null si non reconnu (le caller garde alors la valeur brute).
+ */
+export function normalizeTask(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.toLowerCase().trim();
+  // Ordre important : les libellés composés avant les génériques.
+  if (t.includes('survey') && t.includes('osm')) return 'SURVEY_OSM';
+  // « Survey+Installation » = installation avec étape survey → INSTALLATION (comptée en production).
+  if (t.includes('installation') || t.includes('raccordement')) return 'INSTALLATION';
+  if (t.includes('survey')) return 'SURVEY';
+  if (t.includes('densification') || t.includes('densif')) return 'DENSIFICATION';
+  if (t.includes('deploiement') || t.includes('déploiement')) return 'DEPLOIEMENT';
+  if (t.includes('plantation')) return 'PLANTATION';
+  if (t.includes('devoiement') || t.includes('dévoiement')) return 'DEVOIEMENT';
+  if (t.includes('osm')) return 'OSM';
+  if (t.includes('infra')) return 'INFRA';
+  if (t.includes('sav') || t.includes('depannage') || t.includes('dépannage') || t.includes('releve') || t.includes('reor')) return 'SAV';
+  if (t.includes('genie civil') || t.includes('génie civil')) return 'GC';
+  if (t.includes('reconduction') || t.includes('finalisation') || t.includes('upgrade') || t.includes('deplacement') || t.includes('déplacement')) return 'INSTALLATION';
+  if (t.includes('bts') || t.includes('antenne')) return 'BTS';
+  return null;
+}

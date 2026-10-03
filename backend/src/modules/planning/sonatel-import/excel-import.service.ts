@@ -11,7 +11,7 @@ import { Company } from '../../auth/entities/company.entity';
 import { Mission, TERMINAL_MISSION_STATUSES } from '../../missions/entities/mission.entity';
 import { AuditService } from '../../../common/audit/audit.service';
 import { Partner } from '../../partners/entities/partner.entity';
-import { classifyBlocage } from '../../../common/sonatel-vocabulary';
+import { classifyBlocage, normalizeTask } from '../../../common/sonatel-vocabulary';
 import { ColumnMappingService } from './column-mapping.service';
 import { PreviewStoreService } from './preview-store.service';
 import { ImportPreviewRowDto } from './dto/import-preview-row.dto';
@@ -223,7 +223,7 @@ export class ExcelImportService {
           continue;
         }
         existing.clientSite = row.client ?? existing.clientSite;
-        existing.typeTache = row.task ?? existing.typeTache;
+        existing.typeTache = normalizeTask(row.task) ?? row.task ?? existing.typeTache;
         existing.zone = row.zone ?? existing.zone;
         // Une mission déjà démarrée garde sa date.
         if (row.dateMission && existing.status !== 'en_cours') existing.dateMission = new Date(row.dateMission);
@@ -252,7 +252,7 @@ export class ExcelImportService {
           teamId: hasLabels ? teamId : null,
           technicianIds: hasLabels ? technicianIds : [],
           clientSite: row.client ?? '(client non renseigné)',
-          typeTache: row.task ?? '(tâche non renseignée)',
+          typeTache: normalizeTask(row.task) ?? row.task ?? '(tâche non renseignée)',
           zone: row.zone ?? null,
           dateMission: row.dateMission ? new Date(row.dateMission) : new Date(),
           status: 'planifiee',
@@ -545,7 +545,7 @@ export class ExcelImportService {
       .map((r) => ({
         sonatelDossierNumber: r.dossierNumber,
         clientSite: r.client ?? '(client non renseigné)',
-        typeTache: r.task ?? '(tâche non renseignée)',
+        typeTache: normalizeTask(r.task) ?? r.task ?? '(tâche non renseignée)',
         zone: r.zone ?? null,
         dateMission: r.dateMission ? new Date(r.dateMission) : new Date(),
         sonatelOlt: r.olt ?? null,
