@@ -8,6 +8,7 @@ import {
   AlertTriangle, Eye, Building2, CreditCard, Activity, TrendingUp,
   Bell, MapPin, Bot, Warehouse, Settings, UserPlus, UserCog, LayoutGrid,
   Upload, ListChecks, Clock, MessageSquare, KeyRound, History, UsersRound,
+  ArrowRightLeft, Wallet,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: React.ReactNode; roles?: string[]; }
@@ -49,6 +50,7 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/stock/warehouses', label: 'Dépôts', icon: icon(Warehouse) },
       { href: '/vehicles', label: 'Véhicules', icon: icon(Truck) },
       { href: '/geolocation', label: 'Géolocalisation', icon: icon(MapPin) },
+      { href: '/renforts', label: 'Renforts', icon: icon(ArrowRightLeft) },
     ]},
     { group: 'Gestion', items: [
       { href: '/compliance', label: 'Conformité', icon: icon(ShieldCheck) },
@@ -58,6 +60,7 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/rh/journaliers', label: 'Journaliers', icon: icon(UserCog) },
       { href: '/rh/presence', label: 'Présence', icon: icon(Clock) },
       { href: '/comptabilite', label: 'Comptabilité', icon: icon(Calculator) },
+      { href: '/expenses', label: 'Frais de mission', icon: icon(Wallet) },
       { href: '/invoices', label: 'Facturation', icon: icon(Receipt) },
       { href: '/invoices/bordereau', label: 'Bordereau de prix', icon: icon(ListChecks) },
       { href: '/parametres', label: 'Paramètres', icon: icon(Settings) },

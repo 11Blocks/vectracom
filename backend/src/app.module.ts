@@ -28,6 +28,8 @@ import { ItemsModule } from './modules/items/items.module';
 import { TerritoryModule } from './modules/territory/territory.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { PermanenceModule } from './modules/permanence/permanence.module';
+import { RenfortsModule } from './modules/renforts/renforts.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { BusinessModule } from './modules/business/business.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -83,6 +85,8 @@ import { HealthController } from './modules/health.controller';
     TerritoryModule,
     PricingModule,
     PermanenceModule,
+    RenfortsModule,
+    ExpensesModule,
     IaVisionModule,
     SaasModule,
     MonitoringModule,

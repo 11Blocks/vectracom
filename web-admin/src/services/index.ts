@@ -679,6 +679,32 @@ export const techniciansService = {
 };
 
 // ═══════════════════════════════════════════════════════════
+//  RÉFÉRENTIELS (zones) + RENFORTS + FRAIS DE MISSION (L3)
+// ═══════════════════════════════════════════════════════════
+
+export const zonesService = {
+  list: () => api.get('/zones'),
+  create: (data: { name: string; code?: string }) => api.post('/zones', data),
+  update: (id: string, data: any) => api.put('/zones/' + id, data),
+};
+
+export const renfortsService = {
+  list: (status?: string) => api.get('/renforts' + (status ? '?status=' + status : '')),
+  get: (id: string) => api.get('/renforts/' + id),
+  create: (data: any) => api.post('/renforts', data),
+  update: (id: string, data: any) => api.put('/renforts/' + id, data),
+  setStatus: (id: string, status: string) => api.post('/renforts/' + id + '/status', { status }),
+};
+
+export const expensesService = {
+  list: (params?: Record<string, string>) => api.get('/expenses' + qs(params)),
+  summary: (from?: string, to?: string) => api.get('/expenses/summary' + qs({ from, to })),
+  create: (data: any) => api.post('/expenses', data),
+  update: (id: string, data: any) => api.put('/expenses/' + id, data),
+  remove: (id: string) => api.delete('/expenses/' + id),
+};
+
+// ═══════════════════════════════════════════════════════════
 //  REPORTS
 // ═══════════════════════════════════════════════════════════
 
