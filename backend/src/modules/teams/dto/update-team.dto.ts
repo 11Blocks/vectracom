@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 import { TEAM_TYPES } from '../entities/team.entity';
 
 export class UpdateTeamDto {
@@ -14,6 +14,12 @@ export class UpdateTeamDto {
   @IsOptional()
   @IsString()
   zone?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  repartitionChefPct?: number;
 
   @IsOptional()
   @IsBoolean()

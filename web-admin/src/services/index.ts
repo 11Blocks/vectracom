@@ -702,6 +702,12 @@ export const purchasesService = {
   setStatus: (id: string, status: string) => api.post('/stock-purchases/' + id + '/status', { status }),
 };
 
+export const payrollService = {
+  list: (period?: string) => api.get('/remuneration' + (period ? '?period=' + period : '')),
+  upsert: (data: any) => api.post('/remuneration', data),
+  validate: (id: string) => api.post('/remuneration/' + id + '/valider'),
+};
+
 export const renfortsService = {
   list: (status?: string) => api.get('/renforts' + (status ? '?status=' + status : '')),
   get: (id: string) => api.get('/renforts/' + id),

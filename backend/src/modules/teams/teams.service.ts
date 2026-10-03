@@ -65,6 +65,7 @@ export class TeamsService {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
       ...(dto.type !== undefined ? { type: dto.type as TeamType } : {}),
       ...(dto.zone !== undefined ? { zone: dto.zone } : {}),
+      ...(dto.repartitionChefPct !== undefined ? { repartitionChefPct: String(dto.repartitionChefPct) } : {}),
       ...(dto.active !== undefined ? { active: dto.active } : {}),
     });
     return this.teamRepository.save(team);

@@ -31,6 +31,7 @@ import { PermanenceModule } from './modules/permanence/permanence.module';
 import { RenfortsModule } from './modules/renforts/renforts.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { BusinessModule } from './modules/business/business.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -89,6 +90,7 @@ import { HealthController } from './modules/health.controller';
     RenfortsModule,
     ExpensesModule,
     PurchasesModule,
+    PayrollModule,
     IaVisionModule,
     SaasModule,
     MonitoringModule,

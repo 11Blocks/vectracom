@@ -31,6 +31,10 @@ export class Team extends BaseEntity {
   @Column({ default: true })
   active!: boolean;
 
+  /** Part du chef dans la répartition d'équipe (défaut 65, binôme = complément). */
+  @Column({ type: 'numeric', precision: 5, scale: 2, default: 65 })
+  repartitionChefPct!: string;
+
   @OneToMany('Technician', 'team')
   technicians?: unknown[];
 }
