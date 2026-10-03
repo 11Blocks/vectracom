@@ -89,6 +89,10 @@ export class Mission extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   partnerId: string | null;
 
+  /** Domaine métier (Item) de la mission. */
+  @Column({ type: 'uuid', nullable: true })
+  itemId: string | null;
+
   /** Segment marché : B2C / B2B. */
   @Column({ type: 'text', nullable: true })
   segment: string | null;

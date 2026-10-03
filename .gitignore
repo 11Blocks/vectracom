@@ -26,3 +26,6 @@ web-admin/.next/
 *.p12
 
 *.tsbuildinfo
+
+web-admin/public/app/*.apk
+mobile/*qr*.png

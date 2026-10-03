@@ -13,6 +13,7 @@ export const MISSION_TYPES = [
   'DEPLOIEMENT',
   'DENSIFICATION',
   'SURVEY_OSM',
+  'BTS',
 ] as const;
 export type MissionType = (typeof MISSION_TYPES)[number];
 
@@ -48,6 +49,10 @@ export interface RequiredPhoto {
 export class MissionTypeTemplate extends BaseEntity {
   @Column({ type: 'text' })
   typeName!: MissionType;
+
+  /** Domaine métier (Item) associé au template (facultatif). */
+  @Column({ type: 'uuid', nullable: true })
+  itemId: string | null;
 
   @Column()
   label!: string;

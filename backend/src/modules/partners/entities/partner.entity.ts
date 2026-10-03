@@ -37,6 +37,22 @@ export class Partner extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   exclusiveZone: string | null;
 
+  /** Niveau dans la chaîne de sous-traitance (1 = donneur direct, 2, 3…). */
+  @Column({ type: 'integer', nullable: true })
+  level: number | null;
+
+  /** Partenaire amont (donneur d'ordre) dans la chaîne. */
+  @Column({ type: 'uuid', nullable: true })
+  parentPartnerId: string | null;
+
+  /** Pièce jointe : contrat de sous-traitance (URL). */
+  @Column({ type: 'text', nullable: true })
+  contractFile: string | null;
+
+  /** Pièce jointe : bordereau de prix (URL). */
+  @Column({ type: 'text', nullable: true })
+  bordereauFile: string | null;
+
   @Column({ default: true })
   active!: boolean;
 }

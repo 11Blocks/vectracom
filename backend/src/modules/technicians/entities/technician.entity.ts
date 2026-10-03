@@ -82,6 +82,18 @@ export class Technician extends BaseEntity {
   @OneToMany('Technician', 'teamLeader')
   binomes?: unknown[];
 
+  // ----- Fonction occupée (chef, binôme, stagiaire, journalier…) -----
+  @Column({ type: 'text', nullable: true })
+  fonction: string | null;
+
+  /** Domaine métier (Item) affecté au technicien. */
+  @Column({ type: 'uuid', nullable: true })
+  itemId: string | null;
+
+  /** Zone d'intervention du technicien. */
+  @Column({ type: 'uuid', nullable: true })
+  zoneId: string | null;
+
   // ----- Compétences & expérience -----
   @Column({ type: 'integer', nullable: true })
   experienceYears: number | null;
