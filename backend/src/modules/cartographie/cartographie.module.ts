@@ -31,6 +31,7 @@ class CartographieService {
     const rows: any[] = await this.fb.query(
       `SELECT COALESCE(NULLIF(m.zone, ''), 'Sans zone') AS zone,
               count(*)::int AS total,
+              count(*) FILTER (WHERE m.status IN ('terminee','validee'))::int AS terminees,
               count(*) FILTER (WHERE m.status = 'validee')::int AS validees,
               count(*) FILTER (WHERE m.blocage_motif IS NOT NULL)::int AS bloquees,
               count(*) FILTER (WHERE m.status IN ('planifiee','en_cours','a_completer'))::int AS en_cours
@@ -43,16 +44,30 @@ class CartographieService {
     );
     return rows.map((r) => {
       const total = Number(r.total);
+      const terminees = Number(r.terminees);
       const validees = Number(r.validees);
       const bloquees = Number(r.bloquees);
       const enCours = Number(r.en_cours);
-      const taux = total > 0 ? Math.round((validees / total) * 100) : 0;
+      const taux = total > 0 ? Math.round((terminees / total) * 100) : 0;
       let statut = 'normale';
-      if (total > 0 && bloquees > 0 && validees === 0) statut = 'bloquee';
-      else if (total > 0 && enCours / total >= 0.7 && validees < total * 0.3) statut = 'saturee';
+      if (total > 0 && bloquees > 0 && terminees === 0) statut = 'bloquee';
+      else if (total > 0 && terminees === 0 && enCours / total >= 0.5) statut = 'saturee';
       else if (total > 0 && taux >= 70) statut = 'productive';
-      return { zone: r.zone, total, validees, bloquees, enCours, tauxReussite: taux, statut };
+      return { zone: r.zone, total, terminees, validees, bloquees, enCours, tauxReussite: taux, statut };
     });
+  }
+
+  /** Mois disponibles (pour basculer sur le dernier mois avec données). */
+  async periodes(companyId: string) {
+    const rows: any[] = await this.fb.query(
+      `SELECT to_char(m.date_mission, 'YYYY-MM') AS month, count(*)::int AS total
+         FROM missions m
+        WHERE m.company_id = $1 AND m.date_mission IS NOT NULL
+        GROUP BY month
+        ORDER BY month DESC`,
+      [companyId],
+    );
+    return rows.map((r) => ({ month: r.month, total: Number(r.total) }));
   }
 
   /** Classement des équipes : taux de réussite + satisfaction client. */
@@ -145,6 +160,12 @@ export class CartographieController {
   zones(@CurrentUser('companyId') companyId: string | null, @Query('period') period?: string) {
     this.requireTenant(companyId);
     return this.svc.zones(companyId!, period);
+  }
+
+  @Get('periodes')
+  periodes(@CurrentUser('companyId') companyId: string | null) {
+    this.requireTenant(companyId);
+    return this.svc.periodes(companyId!);
   }
 
   @Get('equipes')

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, Modal, Input, Select, Textarea, useToast, EmptyState } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
@@ -24,10 +24,25 @@ function Content() {
   const { toast } = useToast();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [showFeedback, setShowFeedback] = useState(false);
+  const [autoPicked, setAutoPicked] = useState(false);
 
   const { data: zonesData, loading: zLoading } = useQuery(() => cartographieService.zones(period), [period]);
   const { data: equipesData, loading: eLoading } = useQuery(() => cartographieService.equipes(period), [period]);
   const { data: feedbackData, refetch: refetchFb } = useQuery(() => cartographieService.feedback(), []);
+  const { data: periodesData } = useQuery(() => cartographieService.periodes(), []);
+
+  // Si le mois courant n'a pas encore de données (début de mois), basculer
+  // automatiquement sur le dernier mois qui en a — sinon la carte semble vide.
+  useEffect(() => {
+    if (autoPicked) return;
+    const months = (Array.isArray(periodesData) ? periodesData : []) as { month: string; total: number }[];
+    if (months.length === 0) return;
+    const current = new Date().toISOString().slice(0, 7);
+    const currentHasData = months.some((m) => m.month === current && m.total > 0);
+    if (currentHasData) { setAutoPicked(true); return; }
+    const latest = [...months].sort((a, b) => b.month.localeCompare(a.month)).find((m) => m.total > 0);
+    if (latest) { setPeriod(latest.month); setAutoPicked(true); }
+  }, [periodesData, autoPicked]);
 
   const zones = useMemo(() => (Array.isArray(zonesData) ? zonesData : []), [zonesData]);
   const equipes = useMemo(() => (Array.isArray(equipesData) ? equipesData : []), [equipesData]);
@@ -79,7 +94,7 @@ function Content() {
                   <Badge className={meta.cls + ' mt-2'}>{meta.label}</Badge>
                   <div className="grid grid-cols-3 gap-1 mt-3 text-center">
                     <div><p className="text-sm font-bold text-[#e8ede9]">{z.total}</p><p className="text-[9px] text-[#7a8f80]">missions</p></div>
-                    <div><p className="text-sm font-bold text-[#0f9d70]">{z.validees}</p><p className="text-[9px] text-[#7a8f80]">validées</p></div>
+                    <div><p className="text-sm font-bold text-[#0f9d70]">{z.terminees}</p><p className="text-[9px] text-[#7a8f80]">terminées</p></div>
                     <div><p className="text-sm font-bold text-[#C0392B]">{z.bloquees}</p><p className="text-[9px] text-[#7a8f80]">bloquées</p></div>
                   </div>
                   <div className="h-1.5 rounded-full bg-[#1a2420] overflow-hidden mt-2">

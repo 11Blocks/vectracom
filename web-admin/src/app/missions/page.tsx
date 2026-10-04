@@ -9,7 +9,7 @@ import { useDebounced } from '@/hooks/use-debounced';
 import { missionsService, teamsService, techniciansService, vehiclesService, partnersService } from '@/services';
 import { STATUS_META, typeMeta, typeLabel, statusMeta } from '@/lib/mission-meta';
 import { downloadCsv } from '@/lib/csv';
-import { ClipboardCheck, Plus, Search, Loader2, ArrowRight, MapPin, CheckCircle2, XCircle, UsersRound, Edit, Trash2, RotateCcw, Ban, Download, X } from 'lucide-react';
+import { ClipboardCheck, Plus, Search, Loader2, ArrowRight, MapPin, CheckCircle2, XCircle, UsersRound, Edit, Trash2, RotateCcw, Ban, Download, X, AlertTriangle } from 'lucide-react';
 
 type ReasonTarget = { mode: 'single' | 'bulk'; ids: string[]; status: 'rejetee' | 'annulee'; title: string };
 type BulkResult = { status: string; ok: number; failed: { id: string; clientSite?: string | null; error: string }[] };
@@ -37,14 +37,18 @@ function Content() {
   const pager = usePagination(50, `${statusFilter}|${q}|${zoneQ}`);
 
   const { data, loading, refetch: refetchPage } = useQuery(
-    () => missionsService.page({ status: statusFilter || undefined, search: q || undefined, zone: zoneQ || undefined, ...pager.params }),
+    () => missionsService.page({
+      ...(statusFilter === '__BLOCAGE__' ? { hasBlocage: 'true' } : { status: statusFilter || undefined }),
+      search: q || undefined, zone: zoneQ || undefined, ...pager.params,
+    }),
     [statusFilter, q, zoneQ, pager.offset, pager.limit],
   );
   const { data: counts, refetch: refetchCounts } = useQuery(() => missionsService.statusCounts(q || undefined), [q]);
   const refetch = async () => { await Promise.all([refetchPage(), refetchCounts()]); };
   const list: any[] = data?.items ?? [];
   const total = data?.total ?? 0;
-  const allCount = Object.values(counts ?? {}).reduce((n, c) => n + c, 0);
+  const allCount = Object.entries(counts ?? {}).reduce((n, [k, c]) => (k === '__blocages__' ? n : n + c), 0);
+  const blocageCount = (counts as any)?.__blocages__ ?? 0;
 
   const [reassignTarget, setReassignTarget] = useState<any>(null);
   const [editTarget, setEditTarget] = useState<any>(null);
@@ -155,6 +159,12 @@ function Content() {
           className={'rounded-lg border px-3 py-1.5 text-sm transition-colors ' + (!statusFilter ? 'border-[#0f9d70] bg-[#0f9d70]/10 text-[#0f9d70]' : 'border-[#1e2e25] text-[#7a8f80] hover:text-[#e8ede9]')}>
           Tous {allCount > 0 && <span className="text-xs opacity-70">({allCount})</span>}
         </button>
+        {blocageCount > 0 && (
+          <button onClick={() => setStatusFilter(statusFilter === '__BLOCAGE__' ? '' : '__BLOCAGE__')}
+            className={'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ' + (statusFilter === '__BLOCAGE__' ? 'border-[#C0392B] bg-[#C0392B]/10 text-[#C0392B]' : 'border-[#1e2e25] text-[#7a8f80] hover:text-[#e8ede9]')}>
+            <AlertTriangle size={14} /> Blocages ({blocageCount})
+          </button>
+        )}
         {Object.entries(STATUS_META).map(([k, m]) => {
           const count = counts?.[k] ?? 0;
           if (!count && statusFilter !== k) return null;
@@ -260,6 +270,7 @@ function Content() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {m.surcharge && <Badge className="bg-[#D9822B]/15 text-[#D9822B] border-[#D9822B]/30 text-[10px]">SURCH</Badge>}
+                        {m.blocageMotif && <span title={m.blocageMotif}><Badge className="bg-[#C0392B]/15 text-[#C0392B] border-[#C0392B]/30 text-[10px]"><AlertTriangle size={10} /> BLOQUÉ</Badge></span>}
                         <Badge className={meta.cls}><span className="h-1.5 w-1.5 rounded-full" style={{ background: meta.dot }} />{meta.label}</Badge>
                       </div>
                     </td>

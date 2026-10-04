@@ -148,7 +148,22 @@ export class MissionsService {
       );
     }
     const rows = await qb.getRawMany<{ status: string; count: number }>();
-    return Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
+    const out = Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
+
+    // Compteur des missions bloquées (motif renseigné), même recherche.
+    const bqb = this.missionRepository
+      .createQueryBuilder('mission')
+      .leftJoin('mission.team', 'team')
+      .where('mission.company_id = :companyId', { companyId })
+      .andWhere('mission.blocage_motif IS NOT NULL');
+    if (search?.trim()) {
+      bqb.andWhere(
+        '(mission.client_site ILIKE :q OR mission.sonatel_dossier_number ILIKE :q OR mission.zone ILIKE :q OR team.name ILIKE :q)',
+        { q: `%${search.trim()}%` },
+      );
+    }
+    out['__blocages__'] = await bqb.getCount();
+    return out;
   }
 
   async findOne(companyId: string, id: string): Promise<Mission> {

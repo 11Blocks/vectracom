@@ -716,6 +716,7 @@ export const payrollService = {
 
 export const cartographieService = {
   zones: (period?: string) => api.get('/cartographie/zones' + (period ? '?period=' + period : '')),
+  periodes: () => api.get('/cartographie/periodes'),
   equipes: (period?: string) => api.get('/cartographie/equipes' + (period ? '?period=' + period : '')),
   feedback: (teamId?: string) => api.get('/cartographie/feedback' + (teamId ? '?teamId=' + teamId : '')),
   createFeedback: (data: any) => api.post('/cartographie/feedback', data),
