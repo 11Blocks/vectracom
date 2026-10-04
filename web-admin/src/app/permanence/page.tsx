@@ -122,7 +122,9 @@ function Content() {
                 </div>
                 <div className="divide-y divide-[#1e2e25]/40">
                   {monthSlots.map((s: any) => {
-                    const d = new Date(s.day + 'T00:00:00');
+                    // `day` arrive en ISO complet ("2026-01-01T00:00:00.000Z") — on garde la partie date
+                    // pour éviter new Date("...Z" + "T00:00:00") = Invalid Date (crash de rendu).
+                    const d = new Date(String(s.day).slice(0, 10) + 'T00:00:00');
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                     return (
                       <div key={s.id} className="flex items-center gap-3 px-4 py-2">
