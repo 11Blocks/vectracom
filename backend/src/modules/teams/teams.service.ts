@@ -30,6 +30,9 @@ export class TeamsService {
       name: dto.name.trim(),
       type: dto.type as TeamType,
       zone: dto.zone?.trim() ?? null,
+      zoneId: dto.zoneId ?? null,
+      pilotId: dto.pilotId ?? null,
+      itemId: dto.itemId ?? null,
     });
     return this.teamRepository.save(team);
   }
@@ -65,6 +68,9 @@ export class TeamsService {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
       ...(dto.type !== undefined ? { type: dto.type as TeamType } : {}),
       ...(dto.zone !== undefined ? { zone: dto.zone } : {}),
+      ...(dto.zoneId !== undefined ? { zoneId: dto.zoneId } : {}),
+      ...(dto.pilotId !== undefined ? { pilotId: dto.pilotId } : {}),
+      ...(dto.itemId !== undefined ? { itemId: dto.itemId } : {}),
       ...(dto.repartitionChefPct !== undefined ? { repartitionChefPct: String(dto.repartitionChefPct) } : {}),
       ...(dto.active !== undefined ? { active: dto.active } : {}),
     });

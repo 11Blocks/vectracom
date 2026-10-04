@@ -688,6 +688,12 @@ export const zonesService = {
   update: (id: string, data: any) => api.put('/zones/' + id, data),
 };
 
+export const pilotesService = {
+  list: () => api.get('/pilotes'),
+  create: (data: any) => api.post('/pilotes', data),
+  update: (id: string, data: any) => api.put('/pilotes/' + id, data),
+};
+
 export const itemsService = {
   list: () => api.get('/items'),
   create: (data: any) => api.post('/items', data),

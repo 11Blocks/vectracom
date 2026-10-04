@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button, Badge, Card, Skeleton, EmptyState, Modal, Input, Select, useToast, ConfirmDialog } from '@/components/ui';
 import { useQuery, useMutation } from '@/hooks/use-query';
-import { teamsService, techniciansService } from '@/services';
+import { teamsService, techniciansService, zonesService, pilotesService, itemsService } from '@/services';
 import { Users, Plus, Loader2, Trash2, Edit, UserCheck } from 'lucide-react';
 import Link from 'next/link';
 
@@ -22,9 +22,18 @@ function Content() {
 
   const { data, loading, refetch } = useQuery(() => teamsService.list(), []);
   const { data: techs } = useQuery(() => techniciansService.list(), []);
+  const { data: zonesData } = useQuery(() => zonesService.list(), []);
+  const { data: pilotesData } = useQuery(() => pilotesService.list(), []);
+  const { data: itemsData } = useQuery(() => itemsService.list(), []);
   const list = Array.isArray(data) ? data : [];
   const techList = Array.isArray(techs) ? techs : [];
+  const zones = Array.isArray(zonesData) ? zonesData : [];
+  const pilotes = Array.isArray(pilotesData) ? pilotesData : [];
+  const items = Array.isArray(itemsData) ? itemsData : [];
   const countByTeam = (id: string) => techList.filter((t: any) => t.teamId === id).length;
+  const zoneName = (id?: string | null) => zones.find((z: any) => z.id === id)?.name ?? null;
+  const piloteName = (id?: string | null) => pilotes.find((p: any) => p.id === id)?.name ?? null;
+  const itemCode = (id?: string | null) => items.find((i: any) => i.id === id)?.code ?? null;
 
   const deleteMut = useMutation((id: string) => teamsService.delete(id), {
     onSuccess: () => { toast({ title: 'Équipe supprimée', variant: 'success' }); setDeleteId(null); refetch(); },
@@ -66,7 +75,10 @@ function Content() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm text-[#e8ede9] font-medium">{t.name}</p>
                     <Badge className="bg-[#0f9d70]/15 text-[#0f9d70] border-[#0f9d70]/30">{t.type}</Badge>
-                    {t.zone && <Badge className="bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]">{t.zone}</Badge>}
+                    {(zoneName(t.zoneId) || t.zone) && <Badge className="bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]">{zoneName(t.zoneId) ?? t.zone}</Badge>}
+                    {piloteName(t.pilotId) && <Badge className="bg-[#5b8def]/15 text-[#5b8def] border-[#5b8def]/30">{piloteName(t.pilotId)}</Badge>}
+                    {itemCode(t.itemId) && <Badge className="bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30">{itemCode(t.itemId)}</Badge>}
+                    <Badge className="bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]">{t.repartitionChefPct ?? 65}/{100 - (t.repartitionChefPct ?? 65)}</Badge>
                     {!t.active && <Badge className="bg-[#C0392B]/15 text-[#C0392B] border-[#C0392B]/30">inactive</Badge>}
                   </div>
                   <p className="text-[10px] text-[#7a8f80] mt-0.5">{countByTeam(t.id)} technicien(s)</p>
@@ -85,8 +97,8 @@ function Content() {
         </Card>
       )}
 
-      <TeamFormModal open={showCreate} onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); refetch(); }} />
-      <TeamFormModal open={!!editItem} team={editItem} onClose={() => setEditItem(null)} onDone={() => { setEditItem(null); refetch(); }} />
+      <TeamFormModal open={showCreate} zones={zones} pilotes={pilotes} items={items} onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); refetch(); }} />
+      <TeamFormModal open={!!editItem} team={editItem} zones={zones} pilotes={pilotes} items={items} onClose={() => setEditItem(null)} onDone={() => { setEditItem(null); refetch(); }} />
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} title="Supprimer l’équipe"
         message="Impossible si des techniciens y sont encore rattachés." confirmText="Supprimer" danger
         onConfirm={() => deleteId && deleteMut.mutate(deleteId)} />
@@ -94,19 +106,34 @@ function Content() {
   );
 }
 
-function TeamFormModal({ open, team, onClose, onDone }: { open: boolean; team?: any | null; onClose: () => void; onDone: () => void }) {
+function TeamFormModal({ open, team, zones, pilotes, items, onClose, onDone }: {
+  open: boolean; team?: any | null; zones: any[]; pilotes: any[]; items: any[]; onClose: () => void; onDone: () => void;
+}) {
   const { toast } = useToast();
-  const [f, setF] = useState({ name: '', type: 'PROD', zone: '', active: true });
+  const [f, setF] = useState({ name: '', type: 'PROD', zoneId: '', pilotId: '', itemId: '', repartitionChefPct: '65', active: true });
 
   useEffect(() => {
-    if (team) setF({ name: team.name ?? '', type: team.type ?? 'PROD', zone: team.zone ?? '', active: team.active !== false });
-    else if (open) setF({ name: '', type: 'PROD', zone: '', active: true });
+    if (team) setF({
+      name: team.name ?? '', type: team.type ?? 'PROD',
+      zoneId: team.zoneId ?? '', pilotId: team.pilotId ?? '', itemId: team.itemId ?? '',
+      repartitionChefPct: team.repartitionChefPct != null ? String(team.repartitionChefPct) : '65',
+      active: team.active !== false,
+    });
+    else if (open) setF({ name: '', type: 'PROD', zoneId: '', pilotId: '', itemId: '', repartitionChefPct: '65', active: true });
   }, [team, open]);
 
+  const payload = () => ({
+    name: f.name,
+    type: f.type,
+    zoneId: f.zoneId || null,
+    pilotId: f.pilotId || null,
+    itemId: f.itemId || null,
+    repartitionChefPct: f.repartitionChefPct !== '' ? Number(f.repartitionChefPct) : 65,
+    ...(team ? { active: f.active } : {}),
+  });
+
   const mut = useMutation(
-    () => team
-      ? teamsService.update(team.id, { name: f.name, type: f.type, zone: f.zone || null, active: f.active })
-      : teamsService.create({ name: f.name, type: f.type, zone: f.zone || undefined }),
+    () => team ? teamsService.update(team.id, payload()) : teamsService.create(payload()),
     {
       onSuccess: () => { toast({ title: team ? 'Équipe mise à jour' : 'Équipe créée', variant: 'success' }); onDone(); },
       onError: (e: Error) => toast({ title: 'Erreur', description: e.message, variant: 'error' }),
@@ -121,8 +148,22 @@ function TeamFormModal({ open, team, onClose, onDone }: { open: boolean; team?: 
           <Select label="Type *" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
             {TEAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </Select>
-          <Input label="Zone" value={f.zone} onChange={(e) => setF({ ...f, zone: e.target.value })} placeholder="Mbour" />
+          <Input label="Répartition chef (%)" type="number" min="0" max="100" value={f.repartitionChefPct} onChange={(e) => setF({ ...f, repartitionChefPct: e.target.value })} />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="Zone d'intervention" value={f.zoneId} onChange={(e) => setF({ ...f, zoneId: e.target.value })}>
+            <option value="">—</option>
+            {zones.map((z: any) => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </Select>
+          <Select label="Pilote superviseur" value={f.pilotId} onChange={(e) => setF({ ...f, pilotId: e.target.value })}>
+            <option value="">—</option>
+            {pilotes.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </div>
+        <Select label="Domaine (Item)" value={f.itemId} onChange={(e) => setF({ ...f, itemId: e.target.value })}>
+          <option value="">—</option>
+          {items.map((i: any) => <option key={i.id} value={i.id}>{i.code} · {i.label}</option>)}
+        </Select>
         {team && (
           <label className="flex items-center gap-2 text-sm text-[#e8ede9]">
             <input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} className="accent-[#0f9d70]" />

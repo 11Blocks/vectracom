@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { TEAM_TYPES } from '../entities/team.entity';
 
 export class CreateTeamDto {
@@ -12,4 +12,16 @@ export class CreateTeamDto {
   @IsOptional()
   @IsString()
   zone?: string;
+
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  pilotId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  itemId?: string | null;
 }
