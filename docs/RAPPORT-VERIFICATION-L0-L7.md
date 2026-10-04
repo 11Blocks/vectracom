@@ -28,27 +28,22 @@ Compteurs réels : 6 items · 18 zones · 5 pilotes · 56 équipes · 12 zones c
 
 ## 2. Trous / omissions / à améliorer (par priorité)
 
-### 🔴 Bloquant — fonctionnalité promise mais inutilisable
+### ✅ Résolus (04/10/2026)
 
-| # | Constat | Impact |
+| # | Action | Lot |
 |---|---|---|
-| **A1** | **Permanence (L2) : aucune interface.** Backend OK (génère + assigne les créneaux), mais **pas de page UI ni d'entrée menu**. Le directeur ne peut pas utiliser la rotation SAV/PROD. | Astreinte inopérante |
-| **A2** | **Équipe → zone/pilote/item (L0/L4) : non câblé.** L'entité `teams` a `zoneId`/`pilotId`/`itemId`, mais ni les DTO/service backend, ni la page `/equipes` ne les exposent. Le test L0 « rattacher équipe → zone+pilote » est **impossible**. | Rattachement structurel bloqué |
+| A1 | Page `/permanence` + `PUT /permanence/:id` (assignation par créneau) | L2 |
+| A2 | `zoneId`/`pilotId`/`itemId` câblés équipe (backend + page `/equipes`) | L0/L4 |
+| B1 | Répartition 65/35 éditable via page équipes | L6 |
+| B3 | Rôle `gestionnaire_flotte` (véhicules + nav dédiée) | L4 |
 
-### 🟠 Important — fait à moitié
+### 🟡 Restants
 
-| # | Constat | Impact |
+| # | Constat | Bloqué par |
 |---|---|---|
-| **B1** | **Répartition 65/35 (L6) : non éditable via UI.** Le champ `repartitionChefPct` est dans l'API, la page rémunération l'**affiche**, mais aucune page ne permet de le **modifier** (le « flexible » du directeur est seulement en API). | 65/35 figé |
-| **B2** | **Stock « 5 rubriques » (L5) : seulement 3 familles** (`FIBRE`/`CUIVRE`/`OUTILLAGE`). Les 5 rubriques exactes restent à confirmer avec le directeur. | Classification incomplète |
-| **B3** | **Rôle « gestionnaire flotte » (L4) : absent.** Seul `magasinier` existe ; le directeur veut « un gars pour le stock, un autre pour le véhicule ». | Second poste non couvert |
-
-### 🟡 À clarifier / à consolider
-
-| # | Constat | Impact |
-|---|---|---|
-| **C1** | **Import v2 « à l'identique » (L1) : partiel.** Le mapping colonnes gère **2 onglets** (`planning` + `affect`), pas les 5 feuilles réelles (PLANNING / SURCH / TRAITEES / DISPOSITIF / AFFECT). | Fidélité import incomplète |
-| **C2** | **Facturation par équipe/groupe (L6) : partiel.** La répartition 65/35 (feuille de paie) est faite, mais **pas** d'agrégation de facture *par équipe* (la facture reste par client). À confirmer si requis. | Vue équipe manquante |
+| **B2** | Stock « 5 rubriques » (seulement FIBRE/CUIVRE/OUTILLAGE) | confirmation des 5 rubriques exactes |
+| **C1** | Import v2 « 5 feuilles à l'identique » (seulement planning+affect) | cadrage (long) |
+| **C2** | Facturation par équipe/groupe (la facture reste par client) | confirmation si requis |
 
 ---
 
