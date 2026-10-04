@@ -17,6 +17,7 @@ export const TENANT_ROLES = [
   UserRole.DIRECTION,
   UserRole.CHEF_EQUIPE,
   UserRole.MAGASINIER,
+  UserRole.GESTIONNAIRE_FLOTTE,
 ] as const;
 
 export const CONSOLE_ROLES = [

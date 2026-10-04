@@ -125,6 +125,12 @@ const NAV: Record<string, { group: string; items: NavItem[] }[]> = {
       { href: '/vehicles', label: 'Véhicules', icon: icon(Truck) },
     ]},
   ],
+  gestionnaire_flotte: [
+    { group: 'Flotte', items: [
+      { href: '/vehicles', label: 'Véhicules', icon: icon(Truck) },
+      { href: '/stock', label: 'Stock (lecture)', icon: icon(Package) },
+    ]},
+  ],
 };
 
 function navGroupsForRole(role: string) {
@@ -132,6 +138,7 @@ function navGroupsForRole(role: string) {
   if (role === 'direction') return NAV.direction;
   if (role === 'chef_equipe') return NAV.chef_equipe;
   if (role === 'magasinier') return NAV.magasinier;
+  if (role === 'gestionnaire_flotte') return NAV.gestionnaire_flotte;
   return NAV.admin;
 }
 

@@ -16,6 +16,7 @@ const ROLE_LABELS: Record<string, string> = {
   direction: 'Direction',
   chef_equipe: "Chef d'équipe",
   magasinier: 'Magasinier',
+  gestionnaire_flotte: 'Gestionnaire flotte',
 };
 
 function fmtDateTime(d?: string | null) {

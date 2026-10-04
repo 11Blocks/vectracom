@@ -16,9 +16,10 @@ export const ROLE_LABELS: Record<string, string> = {
   direction: 'Direction',
   chef_equipe: "Chef d'équipe",
   magasinier: 'Magasinier',
+  gestionnaire_flotte: 'Gestionnaire flotte',
 };
 
-export const TENANT_ROLE_OPTIONS = ['admin', 'direction', 'chef_equipe', 'magasinier'];
+export const TENANT_ROLE_OPTIONS = ['admin', 'direction', 'chef_equipe', 'magasinier', 'gestionnaire_flotte'];
 export const CONSOLE_ROLE_OPTIONS = ['super_admin', 'finance_admin', 'support_admin'];
 
 const LICENSE_LABELS: Record<string, string> = { web: 'Web', mobile: 'Mobile', rag: 'Assistant IA', geolocation: 'Géolocalisation' };
@@ -31,6 +32,7 @@ const ROLE_CLS: Record<string, string> = {
   chef_equipe: 'bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30',
   support_admin: 'bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30',
   magasinier: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  gestionnaire_flotte: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
 };
 
 function fmtDateTime(d?: string | null) {

@@ -10,6 +10,7 @@ export enum UserRole {
   DIRECTION = 'direction',
   CHEF_EQUIPE = 'chef_equipe',
   MAGASINIER = 'magasinier',
+  GESTIONNAIRE_FLOTTE = 'gestionnaire_flotte',
 }
 
 /** Rôles Green-T : accès console, non rattachés à un tenant. */

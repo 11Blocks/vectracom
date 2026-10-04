@@ -24,7 +24,7 @@ class ListEventsQueryDto extends PageQueryDto {
 }
 
 @Controller('vehicles')
-@Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE, UserRole.MAGASINIER)
+@Roles(UserRole.ADMIN, UserRole.DIRECTION, UserRole.CHEF_EQUIPE, UserRole.MAGASINIER, UserRole.GESTIONNAIRE_FLOTTE)
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
