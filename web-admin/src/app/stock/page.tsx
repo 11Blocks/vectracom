@@ -7,7 +7,7 @@ import { useQuery, useMutation } from '@/hooks/use-query';
 import { stockService, serialLifecycle } from '@/services';
 import { api } from '@/lib/api';
 import { useSessionUser } from '@/components/admin/TenantPicker';
-import { Package, Plus, Search, Loader2, Boxes, ArrowRightLeft, Trash2, Eye, Warehouse, Barcode, Link2, FileSpreadsheet, AlertTriangle, Smartphone, Edit, ClipboardList, Undo2 } from 'lucide-react';
+import { Package, Plus, Search, Loader2, Boxes, ArrowRightLeft, Trash2, Eye, Warehouse, Barcode, Link2, FileSpreadsheet, AlertTriangle, Smartphone, Edit, ClipboardList, Undo2, X, MapPin } from 'lucide-react';
 
 const MOVEMENT_META: Record<string, { label: string; cls: string; sign: '+' | '-' | null }> = {
   entree: { label: 'Entrée', cls: 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/30', sign: '+' },
@@ -45,6 +45,7 @@ function Content() {
   const { toast } = useToast();
   const [tab, setTab] = useState<'CONSUMABLE' | 'ASSET' | 'BORDEREAU' | 'PARC' | 'OUTILLAGE'>('CONSUMABLE');
   const [search, setSearch] = useState('');
+  const [zoneFilter, setZoneFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showMovement, setShowMovement] = useState(false);
   const [detailItem, setDetailItem] = useState<any | null>(null);
@@ -97,6 +98,9 @@ function Content() {
   const totalOf = (id: string) => (levelsByItem[id] ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
   const whName = (id?: string | null) => id ? (whList.find((w: any) => w.id === id)?.name ?? '—') : '—';
   const itemOf = (id?: string | null) => id ? itemsList.find((i: any) => i.id === id) : undefined;
+  // Zones d'un article = zones des emplacements où il a du stock.
+  const zonesOf = (id: string) => Array.from(new Set((levelsByItem[id] ?? []).map((l: any) => l.warehouse?.zone).filter(Boolean))) as string[];
+  const zoneOptions = Array.from(new Set(whList.map((w: any) => w.zone).filter(Boolean))) as string[];
 
   const deleteMut = useMutation((id: string) => stockService.deleteItem(id), {
     onSuccess: () => { toast({ title: 'Article supprimé', variant: 'success' }); setDeleteId(null); refetch(); },
@@ -122,7 +126,8 @@ function Content() {
 
   const list = itemsList
     .filter(i => i.category === tab)
-    .filter(i => !search || `${i.reference} ${i.designation}`.toLowerCase().includes(search.toLowerCase()));
+    .filter(i => !search || `${i.reference} ${i.designation}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(i => !zoneFilter || zonesOf(i.id).includes(zoneFilter));
   const lowCount = itemsList.filter(i => totalOf(i.id) <= (i.thresholdAlert ?? 0)).length;
   const mvList: any[] = movements?.items ?? [];
   const mvTotal = movements?.total ?? 0;
@@ -182,13 +187,20 @@ function Content() {
         <ToolingTab />
       ) : (
         <>
-          {/* Barre de recherche */}
-          <div className="relative max-w-96">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8f80]" />
-            <input
-              type="text" placeholder="Rechercher par réf. ou désignation…" value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] placeholder:text-[#7a8f80] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50"
-            />
+          {/* Barre de recherche + filtre zone */}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative max-w-96 flex-1 min-w-56">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a8f80]" />
+              <input
+                type="text" placeholder="Rechercher par réf. ou désignation…" value={search} onChange={e => setSearch(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-sm text-[#e8ede9] placeholder:text-[#7a8f80] focus:outline-none focus:ring-2 focus:ring-[#0f9d70]/50"
+              />
+            </div>
+            <Select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} className="w-44">
+              <option value="">Toutes zones</option>
+              {zoneOptions.map(z => <option key={z} value={z}>{z}</option>)}
+            </Select>
+            {zoneFilter && <Button size="sm" variant="ghost" onClick={() => setZoneFilter('')}><X size={13} /> Réinitialiser</Button>}
           </div>
 
           {/* Table articles */}
@@ -216,6 +228,7 @@ function Content() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Référence</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Désignation</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Famille</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Zone(s)</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Qté totale</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[#7a8f80]">Seuil alerte</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7a8f80]">Statut</th>
@@ -234,6 +247,13 @@ function Content() {
                           {item.unit && <p className="text-xs text-[#7a8f80]">unité : {item.unit}</p>}
                         </td>
                         <td className="px-4 py-3"><Badge className="bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]">{item.family}</Badge></td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {zonesOf(item.id).length === 0
+                              ? <span className="text-xs text-[#7a8f80]/60">—</span>
+                              : zonesOf(item.id).map(z => <Badge key={z} className="bg-[#5b8def]/10 text-[#5b8def] border-[#5b8def]/30 text-[10px]">{z}</Badge>)}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-right font-semibold text-[#e8ede9]">{total}</td>
                         <td className="px-4 py-3 text-right text-[#7a8f80]">{item.thresholdAlert ?? '—'}</td>
                         <td className="px-4 py-3">
@@ -275,6 +295,12 @@ function Content() {
                       <span className="text-sm font-medium text-[#e8ede9]">{w.name}</span>
                       <Badge className={'bg-[#1a2420] border-[#1e2e25] ' + meta.cls}>{meta.label}</Badge>
                     </div>
+                    {w.zone && (
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <MapPin size={12} className="text-[#5b8def]" />
+                        <span className="text-xs text-[#5b8def]">{w.zone}{w.region ? ` · ${w.region}` : ''}</span>
+                      </div>
+                    )}
                     {levels.length === 0 ? (
                       <p className="text-xs text-[#7a8f80]/60">Aucun article stocké</p>
                     ) : alerts.length === 0 ? (
