@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, Post, Put, Query } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Between, IsNull, Repository } from 'typeorm';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -79,12 +79,37 @@ export class PermanenceService {
     return { type, assigned: slots.length, teamCount: teams.length };
   }
 
-  /** Liste des créneaux (avec équipe) sur une plage. */
+  /** Liste des créneaux (avec nom d'équipe) sur une plage. */
   async list(companyId: string, type: PermanenceType, from: string, to: string) {
-    return this.slotRepo.find({
-      where: { companyId, type, day: Between(from, to) },
-      order: { day: 'ASC' },
-    });
+    const rows: any[] = await this.slotRepo.query(
+      `SELECT s.*, t.name AS team_name
+         FROM permanence_slots s
+         LEFT JOIN teams t ON t.id = s.team_id
+        WHERE s.company_id = $1 AND s.type = $2 AND s.day BETWEEN $3 AND $4
+        ORDER BY s.day ASC`,
+      [companyId, type, from, to],
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      teamId: r.team_id,
+      teamName: r.team_name,
+      day: r.day,
+      zone: r.zone,
+    }));
+  }
+
+  /** Affecte (ou libère) une équipe sur un créneau précis. */
+  async assignSlot(companyId: string, id: string, teamId: string | null) {
+    const slot = await this.slotRepo.findOne({ where: { companyId, id } });
+    if (!slot) throw new NotFoundException('Créneau introuvable');
+    if (teamId) {
+      const team = await this.teamRepo.findOne({ where: { companyId, id: teamId } });
+      if (!team) throw new BadRequestException('Équipe introuvable pour ce tenant');
+    }
+    slot.teamId = teamId;
+    await this.slotRepo.save(slot);
+    return slot;
   }
 }
 
@@ -95,6 +120,9 @@ class GenerateDto {
 class AssignDto {
   @IsIn(PERMANENCE_TYPES as unknown as string[]) type!: string;
   @IsOptional() @IsArray() @IsString({ each: true }) teamIds?: string[];
+}
+class AssignSlotDto {
+  @IsOptional() @IsUUID() teamId?: string | null;
 }
 
 @Controller('permanence')
@@ -116,6 +144,12 @@ export class PermanenceController {
   assign(@CurrentUser('companyId') companyId: string | null, @Body() dto: AssignDto) {
     this.requireTenant(companyId);
     return this.svc.assignRotation(companyId!, dto.type as PermanenceType, dto.teamIds);
+  }
+
+  @Put(':id')
+  assignSlot(@CurrentUser('companyId') companyId: string | null, @Param('id') id: string, @Body() dto: AssignSlotDto) {
+    this.requireTenant(companyId);
+    return this.svc.assignSlot(companyId!, id, dto.teamId ?? null);
   }
 
   @Get()

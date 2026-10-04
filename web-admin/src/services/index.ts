@@ -715,6 +715,13 @@ export const cartographieService = {
   createFeedback: (data: any) => api.post('/cartographie/feedback', data),
 };
 
+export const permanenceService = {
+  list: (type: string, from: string, to: string) => api.get(`/permanence?type=${type}&from=${from}&to=${to}`),
+  generate: (type: string, year: string) => api.post('/permanence/generate', { type, year }),
+  assign: (type: string) => api.post('/permanence/assign', { type }),
+  assignSlot: (id: string, teamId: string | null) => api.put('/permanence/' + id, { teamId }),
+};
+
 export const renfortsService = {
   list: (status?: string) => api.get('/renforts' + (status ? '?status=' + status : '')),
   get: (id: string) => api.get('/renforts/' + id),
