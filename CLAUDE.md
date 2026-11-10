@@ -73,6 +73,7 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - **Schéma** : uniquement par migration SQL idempotente numérotée ; jamais `synchronize`.
 - **Libellés SONATEL** repris à l'identique ; missions créées manuellement suffixées **« -OT »** et marquées `rajout=true`.
 - **Cascade tarifaire** (décision Moussa, 10/11/2026) : calcul **au franc près, sans arrondi au millier** — 27 000 × 65 % = 17 550 ; 17 550 × 80 % = **14 040**. Les taux s'appliquent aux **prestations** (S+I APP 80 / PASSAGE 87 / Survey 93 / RELEVE 91), pas seulement aux items : colonne `pricing_rules.prestation_key` (migration 020, à venir). Priorité de la règle appliquée : `prestation_key` > `item_id` > règle par défaut (les deux à NULL).
+- **Contrainte `pricing_rules`** : la contrainte d'unicité de `pricing_rules` s'appelle `pricing_rules_company_id_parent_partner_id_child_partner_id_key` (créée par 012 sans nom ; le `@Unique('uq_pricing_rule')` de l'ancienne entité ne correspondait pas à la base). La migration 020 la retrouve par type (`contype = 'u'`), pas par nom, et la remplace par l'index `uq_pricing_rule_v2` (NULLS NOT DISTINCT). Ne pas la renommer.
 - **Visibilité de la rémunération** (décision Moussa, 10/11/2026) : **chacun ne voit que ce qui le concerne**. Le chef d'équipe voit uniquement sa part, le binôme uniquement la sienne ; admin et direction voient tout. À appliquer côté API (pas seulement dans l'écran) pour L8 mobile.
 - **IA** : propose, ne décide jamais — validation humaine obligatoire.
 - Graphiques vides : composant `ChartEmpty`, jamais un graphique muet.
@@ -120,7 +121,7 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 
 | Lot | Contenu | État |
 |---|---|---|
-| L0 | Item (6 domaines), Zone, Pilote, règles de cascade tarifaire | ✅ CRUD — ⚠️ la cascade est **stockée mais calculée nulle part** (plan : `computeCascade` + migration 020 `prestation_key`) |
+| L0 | Item (6 domaines), Zone, Pilote, cascade tarifaire | ✅ CRUD + **calcul de cascade** (`pricing/cascade.ts`, `GET /pricing-rules/simulate`, panneau sur `/partenaires`, validations %/cycles/dates/chevauchements) — ⚠️ migration 020 (`prestation_key`) **à appliquer en prod** ; **factures non branchées** (accord Moussa requis : risque de double réduction) ; prestations Q7/Q8 en attente |
 | L1 | Normalisation tâches SONATEL + « -OT » | ✅ — import 5 feuilles **partiel** (C1) |
 | L2 | Permanence SAV/PROD, filtres, rajouts, levée blocages | ✅ |
 | L3 | Renforts zone→zone + frais de mission | ✅ |
