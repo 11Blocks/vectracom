@@ -14,7 +14,7 @@ dotenv.config();
  * Cascade (pourcentage du tarif amont reversé à l'aval) :
  *   SONATEL → SOFATELCOM : 100 %
  *   SOFATELCOM → ONECOMIT : 65 %   (ex. Survey+Installation 27 000 → 17 550)
- *   ONECOMIT → ABC SARL    : 80 %   (ex. 17 550 → 14 000)
+ *   ONECOMIT → ABC SARL    : 80 %   (ex. 17 550 → 14 040, au franc près)
  * item_id NULL = règle par défaut (tous items) ; les % varient par item → ajouter
  * des règles avec item_id pour les cas particuliers (PASSAGE 87 %, Survey 93 %…).
  */

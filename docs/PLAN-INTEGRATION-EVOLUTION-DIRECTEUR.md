@@ -39,7 +39,9 @@ SONATEL (racine)
 |---|---|---|
 | SONATEL → SOFATELCOM | racine | **27 000** |
 | SOFATELCOM → ONECOMIT | **65 %** | **17 550** |
-| ONECOMIT → niveau 3 | **80 %** | **14 000** |
+| ONECOMIT → niveau 3 | **80 %** | **14 040** |
+
+> Correction 10/11/2026 (Moussa) : 17 550 × 80 % = **14 040** — calcul au franc près, sans arrondi au millier (le « 14 000 » initial était un arrondi).
 
 Les % **varient par item** (S+I APP 80 %, PASSAGE 87 %, Survey 93 %, RELEVE 91 %).
 En aval : déduction des charges (carburant, mécanique, location) → **répartition chef/binôme 65/35** (flexible).
