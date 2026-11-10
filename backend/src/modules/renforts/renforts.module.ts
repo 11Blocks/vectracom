@@ -16,6 +16,7 @@ import { Repository } from 'typeorm';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Renfort, RENFORT_STATUSES, RenfortStatus } from './entities/renfort.entity';
+import { assertTenantIds } from '../../common/tenant-ids';
 
 class CreateRenfortDto {
   @IsUUID() teamId!: string;
@@ -41,7 +42,7 @@ class RenfortStatusDto {
   @IsIn(RENFORT_STATUSES as unknown as string[]) status!: string;
 }
 
-class RenfortsService {
+export class RenfortsService {
   constructor(@InjectRepository(Renfort) private readonly repo: Repository<Renfort>) {}
 
   private async assertTeam(companyId: string, teamId: string) {
@@ -57,9 +58,9 @@ class RenfortsService {
               zt.name AS to_zone_name,
               (SELECT count(*)::int FROM technicians tech WHERE tech.team_id = r.team_id AND tech.active = true) AS member_count
          FROM renforts r
-         LEFT JOIN teams t ON t.id = r.team_id
-         LEFT JOIN zones zf ON zf.id = r.from_zone_id
-         LEFT JOIN zones zt ON zt.id = r.to_zone_id
+         LEFT JOIN teams t ON t.id = r.team_id AND t.company_id = r.company_id
+         LEFT JOIN zones zf ON zf.id = r.from_zone_id AND zf.company_id = r.company_id
+         LEFT JOIN zones zt ON zt.id = r.to_zone_id AND zt.company_id = r.company_id
         WHERE r.company_id = $1
           ${status ? 'AND r.status = $2' : ''}
         ORDER BY r.start_date DESC`,
@@ -76,9 +77,9 @@ class RenfortsService {
               zt.name AS to_zone_name,
               (SELECT count(*)::int FROM technicians tech WHERE tech.team_id = r.team_id AND tech.active = true) AS member_count
          FROM renforts r
-         LEFT JOIN teams t ON t.id = r.team_id
-         LEFT JOIN zones zf ON zf.id = r.from_zone_id
-         LEFT JOIN zones zt ON zt.id = r.to_zone_id
+         LEFT JOIN teams t ON t.id = r.team_id AND t.company_id = r.company_id
+         LEFT JOIN zones zf ON zf.id = r.from_zone_id AND zf.company_id = r.company_id
+         LEFT JOIN zones zt ON zt.id = r.to_zone_id AND zt.company_id = r.company_id
         WHERE r.company_id = $1 AND r.id = $2`,
       [companyId, id],
     );
@@ -118,6 +119,7 @@ class RenfortsService {
 
   async create(companyId: string, dto: CreateRenfortDto) {
     await this.assertTeam(companyId, dto.teamId);
+    await assertTenantIds(this.repo, companyId, 'zones', [dto.fromZoneId, dto.toZoneId]);
     const start = dto.startDate.slice(0, 10);
     const end = dto.endDate.slice(0, 10);
     if (end < start) throw new BadRequestException('La date de fin doit être ≥ date de début');
@@ -140,6 +142,7 @@ class RenfortsService {
     const renfort = await this.repo.findOne({ where: { companyId, id } });
     if (!renfort) throw new NotFoundException('Renfort introuvable');
     if (dto.teamId !== undefined && dto.teamId !== renfort.teamId) await this.assertTeam(companyId, dto.teamId);
+    await assertTenantIds(this.repo, companyId, 'zones', [dto.fromZoneId, dto.toZoneId]);
     if (dto.teamId !== undefined) renfort.teamId = dto.teamId;
     if (dto.fromZoneId !== undefined) renfort.fromZoneId = dto.fromZoneId;
     if (dto.toZoneId !== undefined) renfort.toZoneId = dto.toZoneId;

@@ -16,9 +16,8 @@ import { Repository } from 'typeorm';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StockPurchase, PURCHASE_STATUSES, PurchaseStatus } from './entities/stock-purchase.entity';
-
-/** Seuil de perte contractuel SONATEL (au-delà → sanction). */
-const DEFAULT_LOSS_THRESHOLD_PCT = 10;
+import { assertTenantIds } from '../../common/tenant-ids';
+import { computeLossRate, DEFAULT_LOSS_THRESHOLD_PCT } from './loss-rate';
 
 class CreatePurchaseDto {
   @IsOptional() @IsUUID() stockItemId?: string | null;
@@ -42,14 +41,14 @@ class PurchaseStatusDto {
   @IsIn(PURCHASE_STATUSES as unknown as string[]) status!: string;
 }
 
-class PurchasesService {
+export class PurchasesService {
   constructor(@InjectRepository(StockPurchase) private readonly repo: Repository<StockPurchase>) {}
 
   async list(companyId: string, status?: string) {
     const rows: any[] = await this.repo.query(
       `SELECT p.*, i.reference AS item_reference, i.designation AS item_designation
          FROM stock_purchases p
-         LEFT JOIN stock_items i ON i.id = p.stock_item_id
+         LEFT JOIN stock_items i ON i.id = p.stock_item_id AND i.company_id = p.company_id
         WHERE p.company_id = $1
           ${status ? 'AND p.status = $2' : ''}
         ORDER BY p.created_at DESC`,
@@ -92,7 +91,7 @@ class PurchasesService {
     const items = rows.map((r) => {
       const entrees = Number(r.entrees);
       const pertes = Number(r.pertes);
-      const taux = entrees > 0 ? Math.round((pertes / entrees) * 1000) / 10 : 0;
+      const { taux, depasseSeuil } = computeLossRate(entrees, pertes);
       return {
         stockItemId: r.id,
         reference: r.reference,
@@ -100,7 +99,7 @@ class PurchasesService {
         entrees,
         pertes,
         taux,
-        depasseSeuil: taux > DEFAULT_LOSS_THRESHOLD_PCT,
+        depasseSeuil,
       };
     });
     const depassements = items.filter((x) => x.depasseSeuil);
@@ -108,6 +107,7 @@ class PurchasesService {
   }
 
   async create(companyId: string, dto: CreatePurchaseDto, userId: string) {
+    await assertTenantIds(this.repo, companyId, 'stock_items', dto.stockItemId);
     return this.repo.save(
       this.repo.create({
         companyId,
@@ -126,6 +126,7 @@ class PurchasesService {
   async update(companyId: string, id: string, dto: UpdatePurchaseDto) {
     const p = await this.repo.findOne({ where: { companyId, id } });
     if (!p) throw new NotFoundException('Achat introuvable');
+    await assertTenantIds(this.repo, companyId, 'stock_items', dto.stockItemId);
     if (dto.stockItemId !== undefined) p.stockItemId = dto.stockItemId;
     if (dto.designation !== undefined) p.designation = dto.designation.trim();
     if (dto.quantity !== undefined) p.quantity = dto.quantity;

@@ -2,15 +2,16 @@ import { BadRequestException, Body, Controller, Get, Post, Put, Param } from '@n
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Module } from '@nestjs/common';
-import { IsBoolean, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumberString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { assertTenantIds } from '../../common/tenant-ids';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PricingRule } from './entities/pricing-rule.entity';
 
 class CreatePricingRuleDto {
-  @IsString() parentPartnerId!: string;
-  @IsString() childPartnerId!: string;
-  @IsOptional() @IsString() itemId?: string;
+  @IsUUID() parentPartnerId!: string;
+  @IsUUID() childPartnerId!: string;
+  @IsOptional() @IsUUID() itemId?: string;
   @IsNumberString() percentage!: string;
   @IsOptional() @IsString() effectiveFrom?: string;
   @IsOptional() @IsString() effectiveTo?: string;
@@ -40,6 +41,8 @@ export class PricingRulesController {
     if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 1000) {
       throw new BadRequestException('Pourcentage invalide (doit être > 0 et ≤ 1000)');
     }
+    await assertTenantIds(this.repo, companyId!, 'partners', [dto.parentPartnerId, dto.childPartnerId]);
+    await assertTenantIds(this.repo, companyId!, 'items', dto.itemId);
     return this.repo.save(
       this.repo.create({
         companyId: companyId!,

@@ -6,6 +6,7 @@ import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PermanenceSlot, PERMANENCE_TYPES, PermanenceType } from './entities/permanence-slot.entity';
 import { Team } from '../teams/entities/team.entity';
+import { assertTenantIds } from '../../common/tenant-ids';
 
 /**
  * Jours fériés civils du Sénégal (fixes). Les fêtes musulmanes (Korité,
@@ -63,8 +64,10 @@ export class PermanenceService {
     });
     if (slots.length === 0) return { type, assigned: 0, teamCount: 0 };
 
-    let teams = teamIds ?? [];
-    if (teams.length === 0) {
+    let teams = [...new Set(teamIds ?? [])];
+    if (teams.length > 0) {
+      await assertTenantIds(this.teamRepo, companyId, 'teams', teams);
+    } else {
       const wantedType = TYPE_TO_TEAM_TYPE[type];
       let rows = await this.teamRepo.find({ where: { companyId, active: true, type: wantedType as Team['type'] }, select: ['id'] });
       if (rows.length === 0) rows = await this.teamRepo.find({ where: { companyId, active: true }, select: ['id'] });
@@ -84,7 +87,7 @@ export class PermanenceService {
     const rows: any[] = await this.slotRepo.query(
       `SELECT s.*, t.name AS team_name
          FROM permanence_slots s
-         LEFT JOIN teams t ON t.id = s.team_id
+         LEFT JOIN teams t ON t.id = s.team_id AND t.company_id = s.company_id
         WHERE s.company_id = $1 AND s.type = $2 AND s.day BETWEEN $3 AND $4
         ORDER BY s.day ASC`,
       [companyId, type, from, to],
@@ -119,7 +122,7 @@ class GenerateDto {
 }
 class AssignDto {
   @IsIn(PERMANENCE_TYPES as unknown as string[]) type!: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) teamIds?: string[];
+  @IsOptional() @IsArray() @IsUUID('all', { each: true }) teamIds?: string[];
 }
 class AssignSlotDto {
   @IsOptional() @IsUUID() teamId?: string | null;

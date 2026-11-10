@@ -17,6 +17,7 @@ import { Repository } from 'typeorm';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MissionExpense, EXPENSE_TYPES, ExpenseType } from './entities/mission-expense.entity';
+import { assertTenantIds } from '../../common/tenant-ids';
 
 class CreateExpenseDto {
   @IsOptional() @IsUUID() teamId?: string | null;
@@ -36,15 +37,15 @@ class UpdateExpenseDto {
   @IsOptional() @IsString() note?: string | null;
 }
 
-class ExpensesService {
+export class ExpensesService {
   constructor(@InjectRepository(MissionExpense) private readonly repo: Repository<MissionExpense>) {}
 
   async list(companyId: string, f: { type?: string; teamId?: string; from?: string; to?: string }) {
     const rows: any[] = await this.repo.query(
       `SELECT e.*, t.name AS team_name, m.client_site AS mission_label
          FROM mission_expenses e
-         LEFT JOIN teams t ON t.id = e.team_id
-         LEFT JOIN missions m ON m.id = e.mission_id
+         LEFT JOIN teams t ON t.id = e.team_id AND t.company_id = e.company_id
+         LEFT JOIN missions m ON m.id = e.mission_id AND m.company_id = e.company_id
         WHERE e.company_id = $1
           ${f.type ? 'AND e.expense_type = $2' : ''}
         ORDER BY e.expense_date DESC, e.created_at DESC`,
@@ -89,7 +90,14 @@ class ExpensesService {
     return { byType, grandTotal };
   }
 
+  /** Équipe et mission rattachées doivent appartenir au tenant. */
+  private async assertRefs(companyId: string, dto: { teamId?: string | null; missionId?: string | null }) {
+    await assertTenantIds(this.repo, companyId, 'teams', dto.teamId);
+    await assertTenantIds(this.repo, companyId, 'missions', dto.missionId);
+  }
+
   async create(companyId: string, dto: CreateExpenseDto, userId: string) {
+    await this.assertRefs(companyId, dto);
     return this.repo.save(
       this.repo.create({
         companyId,
@@ -107,6 +115,7 @@ class ExpensesService {
   async update(companyId: string, id: string, dto: UpdateExpenseDto) {
     const e = await this.repo.findOne({ where: { companyId, id } });
     if (!e) throw new NotFoundException('Frais introuvable');
+    await this.assertRefs(companyId, dto);
     if (dto.teamId !== undefined) e.teamId = dto.teamId;
     if (dto.missionId !== undefined) e.missionId = dto.missionId;
     if (dto.expenseType !== undefined) e.expenseType = dto.expenseType as ExpenseType;

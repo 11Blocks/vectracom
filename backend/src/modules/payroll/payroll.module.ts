@@ -16,6 +16,8 @@ import { Repository } from 'typeorm';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TeamPayroll, PAYROLL_STATUSES, PayrollStatus } from './entities/team-payroll.entity';
+import { assertTenantIds } from '../../common/tenant-ids';
+import { computePayrollSplit, DEFAULT_CHEF_PCT, isValidPeriod } from './payroll-split';
 
 class UpsertPayrollDto {
   @IsUUID() teamId!: string;
@@ -30,7 +32,7 @@ class PayrollStatusDto {
   @IsIn(PAYROLL_STATUSES as unknown as string[]) status!: string;
 }
 
-class PayrollService {
+export class PayrollService {
   constructor(@InjectRepository(TeamPayroll) private readonly repo: Repository<TeamPayroll>) {}
 
   /** Feuille de paie par équipe sur une période, avec répartition 65/35. */
@@ -46,8 +48,8 @@ class PayrollService {
                   AND to_char(m.date_mission, 'YYYY-MM') = $2) AS missions_validees
          FROM teams t
          LEFT JOIN team_payrolls p ON p.team_id = t.id AND p.company_id = t.company_id AND p.period = $2
-         LEFT JOIN technicians c ON c.id = p.chef_id
-         LEFT JOIN technicians b ON b.id = p.binome_id
+         LEFT JOIN technicians c ON c.id = p.chef_id AND c.company_id = t.company_id
+         LEFT JOIN technicians b ON b.id = p.binome_id AND b.company_id = t.company_id
         WHERE t.company_id = $1
         ORDER BY t.name ASC`,
       [companyId, period],
@@ -72,13 +74,13 @@ class PayrollService {
 
   /** Crée ou met à jour la feuille de paie, en recalculant le 65/35. */
   async upsert(companyId: string, dto: UpsertPayrollDto) {
-    if (!/^\d{4}-\d{2}$/.test(dto.period)) throw new BadRequestException('Période invalide (attendu YYYY-MM)');
+    if (!isValidPeriod(dto.period)) throw new BadRequestException('Période invalide (attendu YYYY-MM)');
     const team: any[] = await this.repo.query('SELECT repartition_chef_pct FROM teams WHERE id = $1 AND company_id = $2', [dto.teamId, companyId]);
     if (!team.length) throw new BadRequestException('Équipe introuvable pour ce tenant');
+    await assertTenantIds(this.repo, companyId, 'technicians', [dto.chefId, dto.binomeId]);
 
-    const chefPct = Number(team[0].repartition_chef_pct ?? 65);
-    const chefShare = Math.round((dto.revenue * chefPct) / 100);
-    const binomeShare = dto.revenue - chefShare;
+    const chefPct = Number(team[0].repartition_chef_pct ?? DEFAULT_CHEF_PCT);
+    const { chefShare, binomeShare } = computePayrollSplit(dto.revenue, chefPct);
 
     let payroll = await this.repo.findOne({ where: { companyId, teamId: dto.teamId, period: dto.period } });
     if (payroll) {

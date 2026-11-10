@@ -128,8 +128,8 @@ class CartographieService {
     const rows: any[] = await this.fb.query(
       `SELECT f.*, m.client_site AS mission_label, t.name AS team_name
          FROM client_feedback f
-         LEFT JOIN missions m ON m.id = f.mission_id
-         LEFT JOIN teams t ON t.id = f.team_id
+         LEFT JOIN missions m ON m.id = f.mission_id AND m.company_id = f.company_id
+         LEFT JOIN teams t ON t.id = f.team_id AND t.company_id = f.company_id
         WHERE f.company_id = $1
           ${teamId ? 'AND f.team_id = $2' : ''}
         ORDER BY f.created_at DESC`,

@@ -7,6 +7,7 @@ import { Roles, UserRole } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Zone } from './entities/zone.entity';
 import { Pilote, PILOTE_TYPES } from './entities/pilote.entity';
+import { assertTenantIds } from '../../common/tenant-ids';
 
 class CreateZoneDto {
   @IsString() @MinLength(2) name!: string;
@@ -81,6 +82,7 @@ export class PilotesController {
   @Post()
   async create(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreatePiloteDto) {
     this.requireTenant(companyId);
+    await assertTenantIds(this.repo, companyId!, 'partners', dto.partnerId);
     return this.repo.save(
       this.repo.create({
         companyId: companyId!,
@@ -96,6 +98,7 @@ export class PilotesController {
     this.requireTenant(companyId);
     const pilote = await this.repo.findOne({ where: { companyId: companyId!, id } });
     if (!pilote) throw new BadRequestException('Pilote introuvable');
+    await assertTenantIds(this.repo, companyId!, 'partners', dto.partnerId);
     if (dto.name !== undefined) pilote.name = dto.name;
     if (dto.type !== undefined) pilote.type = dto.type as Pilote['type'];
     if (dto.partnerId !== undefined) pilote.partnerId = dto.partnerId;

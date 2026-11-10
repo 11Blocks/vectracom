@@ -9,6 +9,7 @@ import { Team, TeamType } from './entities/team.entity';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
 import { Technician } from '../technicians/entities/technician.entity';
+import { assertTenantIds } from '../../common/tenant-ids';
 
 @Injectable()
 export class TeamsService {
@@ -24,6 +25,7 @@ export class TeamsService {
       where: { companyId, name: dto.name.trim() },
     });
     if (existing) throw new ConflictException(`L'équipe « ${dto.name} » existe déjà`);
+    await this.assertRefs(companyId, dto);
 
     const team = this.teamRepository.create({
       companyId,
@@ -35,6 +37,16 @@ export class TeamsService {
       itemId: dto.itemId ?? null,
     });
     return this.teamRepository.save(team);
+  }
+
+  /** Zone, pilote et item rattachés doivent appartenir au tenant. */
+  private async assertRefs(
+    companyId: string,
+    dto: { zoneId?: string | null; pilotId?: string | null; itemId?: string | null },
+  ): Promise<void> {
+    await assertTenantIds(this.teamRepository, companyId, 'zones', dto.zoneId);
+    await assertTenantIds(this.teamRepository, companyId, 'pilotes', dto.pilotId);
+    await assertTenantIds(this.teamRepository, companyId, 'items', dto.itemId);
   }
 
   async list(companyId: string, filters: { type?: string; zone?: string; active?: boolean }) {
@@ -56,6 +68,7 @@ export class TeamsService {
 
   async update(companyId: string, id: string, dto: UpdateTeamDto): Promise<Team> {
     const team = await this.findOne(companyId, id);
+    await this.assertRefs(companyId, dto);
     if (dto.name && dto.name !== team.name) {
       const existing = await this.teamRepository.findOne({
         where: { companyId, name: dto.name.trim() },
