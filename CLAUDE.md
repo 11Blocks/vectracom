@@ -73,6 +73,7 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - **Schéma** : uniquement par migration SQL idempotente numérotée ; jamais `synchronize`.
 - **Libellés SONATEL** repris à l'identique ; missions créées manuellement suffixées **« -OT »** et marquées `rajout=true`.
 - **Cascade tarifaire** (décision Moussa, 10/11/2026) : calcul **au franc près, sans arrondi au millier** — 27 000 × 65 % = 17 550 ; 17 550 × 80 % = **14 040**. Les taux s'appliquent aux **prestations** (S+I APP 80 / PASSAGE 87 / Survey 93 / RELEVE 91), pas seulement aux items : colonne `pricing_rules.prestation_key` (migration 020, à venir). Priorité de la règle appliquée : `prestation_key` > `item_id` > règle par défaut (les deux à NULL).
+- **Visibilité de la rémunération** (décision Moussa, 10/11/2026) : **chacun ne voit que ce qui le concerne**. Le chef d'équipe voit uniquement sa part, le binôme uniquement la sienne ; admin et direction voient tout. À appliquer côté API (pas seulement dans l'écran) pour L8 mobile.
 - **IA** : propose, ne décide jamais — validation humaine obligatoire.
 - Graphiques vides : composant `ChartEmpty`, jamais un graphique muet.
 - Langue : UI, messages d'erreur et commits en français (`feat(Lx): …`, `fix(module): …`).
@@ -101,10 +102,19 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 
 - VPS `ubuntu@83.228.222.179`, dossier **`/mnt/data/apps/Vectracom`**.
 - Conteneurs : `vectracom-backend`, `vectracom-web` (image `vectracom-web-admin`), `vectracom-postgres`, `vectracom-redis`.
-- `bash scripts/deploy-vps.sh ubuntu@83.228.222.179 /mnt/data/apps/Vectracom` → rsync **sans `.git`**, exclut `.env*`, `docker-compose.yml`, `backend/uploads`, `node_modules`, builds.
-- Puis rebuild sur le VPS : `docker compose build backend web-admin && docker compose up -d backend web-admin` (uniquement ces services).
-- Pas de hash git sur le VPS : vérifier un déploiement par `md5sum` de fichiers ciblés comparés au local.
-- Dernier état vérifié (10/11/2026) : source VPS = `9be5537` (md5 identiques sur les 3 pages des derniers commits).
+- ❌ **Ne pas utiliser `scripts/deploy-vps.sh` depuis ce PC Windows** : `rsync` est absent, le script n'exclut que les `.env*` de la racine (il enverrait `backend/.env`, `web-admin/.env`, `web-admin/.env.local`, `mobile/.env`, `mobile/android/`, les logs) et `--delete` efface sur le VPS tout fichier absent en local.
+- ✅ **Méthode validée (10/11/2026)** : n'envoyer que les fichiers **suivis par git** modifiés depuis la version en prod, **en forçant le LF** :
+  ```bash
+  git -c core.autocrlf=false -c core.eol=lf archive HEAD $(git diff --name-only <hash_prod> HEAD) \
+    | ssh -i ~/.ssh/trackit_vps ubuntu@83.228.222.179 "tar -x -C /mnt/data/apps/Vectracom"
+  ```
+  ⚠️ **Piège `autocrlf`** : ce PC a `core.autocrlf=true`. Sans les deux options `-c`, `git archive` convertit les fichiers en **CRLF** : le TypeScript compile quand même, mais **les scripts bash sont cassés** sur Linux et les md5 ne correspondent plus.
+- Vérification : comparer au blob git (`git show HEAD:<fichier> | md5sum`), pas au fichier de travail Windows ; `md5sum -c` sur le VPS pour tous les fichiers envoyés ; `grep -c $'\r'` doit donner 0.
+- Avant : sauvegarde `~/backups/vectracom_<date>/` (tag image `vectracom-backend:rollback-<date>`, `tar` de `backend/src`, `pg_dump` vérifié).
+- Puis rebuild **du seul service modifié** : `docker compose build backend && docker compose up -d --no-deps backend`, health `GET /api/v1/health` (interne `127.0.0.1:3100` et public). Le log « localhost:3000 » est le port interne du conteneur (mappé sur 3100), pas TrackIT.
+- Retour arrière : `docker tag vectracom-backend:rollback-<date> vectracom-backend && docker compose up -d --no-deps backend`.
+- Pas de hash git sur le VPS : la version en prod se déduit par `md5sum`.
+- Dernier déploiement (10/11/2026, 20:38) : backend = `7bcbe28` (isolation tenant), web = `9be5537`. Sauvegarde : `~/backups/vectracom_20261110/`.
 
 ## 9. État d'avancement (évolution « réunion directeur »)
 

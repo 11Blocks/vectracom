@@ -1,8 +1,8 @@
-Objet : VECTRACOM — 7 points à valider pour finaliser les évolutions
+Objet : VECTRACOM — 9 points à valider pour finaliser les évolutions
 
 Bonjour Monsieur le Directeur,
 
-Les évolutions décidées lors de notre réunion sont en production (Items, zones et pilotes, permanence, renforts, achats SONATEL, rémunération 65/35, cartographie). Pour terminer, nous avons besoin de votre arbitrage sur 7 points. Pour chacun, nous indiquons ce que nous appliquerons par défaut si nous n'avons pas de réponse d'ici le [date à compléter].
+Les évolutions décidées lors de notre réunion sont en production (Items, zones et pilotes, permanence, renforts, achats SONATEL, rémunération 65/35, cartographie). Pour terminer, nous avons besoin de votre arbitrage sur 9 points. Pour chacun, nous indiquons ce que nous appliquerons par défaut si nous n'avons pas de réponse d'ici le [date à compléter].
 
 1. Les 5 rubriques du stock (Q_B2)
 Nous avons compris que les 5 rubriques sont : Stock, Focus Stock, Suivi Consommation, Comptabilité Matière, Ventilation aux Équipes.
@@ -39,6 +39,16 @@ Par défaut : 3 niveaux, avec ONECOMIT au niveau 2. Le système accepte quand m�
 Question : par quel canal le client final donne-t-il son avis (SMS, WhatsApp, application) ? Qui le recueille : le client lui-même ou le chef d'équipe sur place ?
 Pourquoi c'est bloquant : cela détermine s'il faut un envoi automatique (SMS ou WhatsApp, avec un coût) ou une simple saisie dans l'application mobile.
 Par défaut : le chef d'équipe saisit la note (propreté, comportement, de 1 à 5) avec le client à la clôture de la mission, sur le mobile.
+
+8. La prestation « S+I APP » (Q7)
+Question : « S+I APP » est-il une variante appartement de « Survey + Installation » ? Si oui, quel nom de prestation devons-nous utiliser ?
+Pourquoi c'est bloquant : son taux de reversement (80 %) est différent des autres prestations ; sans prestation distincte, il ne peut pas être appliqué.
+Par défaut : nous appliquons la règle « Survey + Installation » existante, sans taux spécifique « APP ».
+
+9. La prestation « PASSAGE » (Q8)
+Question : « PASSAGE » correspond-il au « Déplacement SAV », ou à une autre prestation ?
+Pourquoi c'est bloquant : son taux de reversement (87 %) doit être rattaché à la bonne prestation.
+Par défaut : aucun taux « PASSAGE » n'est appliqué tant que la correspondance n'est pas confirmée ; la règle par défaut s'applique.
 
 Nous restons disponibles pour en parler de vive voix.
 
