@@ -45,6 +45,24 @@ export const partnersService = {
   update: (id: string, data: any) => api.put('/partners/' + id, data),
 };
 
+/** Cascade tarifaire multi-niveaux (règles + simulation en lecture seule). */
+export const pricingService = {
+  list: () => api.get('/pricing-rules'),
+  prestations: () => api.get('/pricing-rules/prestations'),
+  simulate: (params: {
+    fromPartnerId: string;
+    toPartnerId?: string;
+    itemId?: string;
+    prestationKey?: string;
+    basePrice: number;
+    date?: string;
+  }) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') q.set(k, String(v));
+    return api.get('/pricing-rules/simulate?' + q.toString());
+  },
+};
+
 export const missionsService = {
   list: (params?: Record<string, string>) => api.get('/missions?' + new URLSearchParams(params || {})),
   page: (params?: Record<string, string | undefined>) => api.getPage('/missions' + qs(params)),

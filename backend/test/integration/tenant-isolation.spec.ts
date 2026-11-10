@@ -5,7 +5,7 @@ import { PermanenceService } from '../../src/modules/permanence/permanence.modul
 import { ExpensesService } from '../../src/modules/expenses/expenses.module';
 import { RenfortsService } from '../../src/modules/renforts/renforts.module';
 import { PurchasesService } from '../../src/modules/purchases/purchases.module';
-import { PricingRulesController } from '../../src/modules/pricing/pricing.module';
+import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PilotesController } from '../../src/modules/territory/territory.module';
 import { TeamsService } from '../../src/modules/teams/teams.service';
 
@@ -207,7 +207,7 @@ describe('Modules L0–L7 : ID d’un autre tenant refusé, rien n’est écrit'
   it('cascade tarifaire — partenaire aval d’un autre tenant', async () => {
     const repo = fakeRepo();
     await expectTenantRefusal(
-      new PricingRulesController(repo).create(A, {
+      new PricingService(repo).create(A, {
         parentPartnerId: id('partners', A),
         childPartnerId: id('partners', B),
         percentage: '65',
@@ -219,7 +219,7 @@ describe('Modules L0–L7 : ID d’un autre tenant refusé, rien n’est écrit'
   it('cascade tarifaire — item d’un autre tenant', async () => {
     const repo = fakeRepo();
     await expectTenantRefusal(
-      new PricingRulesController(repo).create(A, {
+      new PricingService(repo).create(A, {
         parentPartnerId: id('partners', A),
         childPartnerId: id('partners', A),
         itemId: id('items', B),
@@ -227,6 +227,18 @@ describe('Modules L0–L7 : ID d’un autre tenant refusé, rien n’est écrit'
       } as any),
     );
     expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('simulation de cascade — partenaire final d’un autre tenant', async () => {
+    const repo = fakeRepo();
+    await expectTenantRefusal(new PricingService(repo).simulate(A, { fromPartnerId: id('partners', A), toPartnerId: id('partners', B), basePrice: 27_000 }));
+    expect(repo.find).not.toHaveBeenCalled();
+  });
+
+  it('simulation de cascade — item d’un autre tenant', async () => {
+    const repo = fakeRepo();
+    await expectTenantRefusal(new PricingService(repo).simulate(A, { fromPartnerId: id('partners', A), itemId: id('items', B), basePrice: 27_000 }));
+    expect(repo.find).not.toHaveBeenCalled();
   });
 
   it('pilote — partenaire d’un autre tenant', async () => {
