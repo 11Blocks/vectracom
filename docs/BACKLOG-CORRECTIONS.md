@@ -16,7 +16,7 @@
 | 2 | **PAY-1** ✅ (11/11/2026, `f769752`) | Payroll : refuser toute modification d'une feuille au statut `validee` (400) | 🔴 une paie validée peut être réécrite | S | aucune — active le `it.todo` correspondant |
 | 3 | **PRC-1** ✅ (réglé par la cascade, `b75e8d3`) | Pricing : pourcentage ≤ 100, revalidé aussi en modification (aujourd'hui ≤ 1000, et `update` accepte NaN) ; parent ≠ enfant ; `effectiveFrom` ≤ `effectiveTo` | 🔴 règle de cascade aberrante possible | S | à faire avec la cascade (`computeCascade`) |
 | 4 | **STK-1** ✅ (codé 11/11/2026, à valider ; seuil `>=` toujours provisoire) | Pertes : alerte si 0 entrée et pertes > 0 ; trancher définitivement le seuil `>=` (provisoire) ou `>` | 🟠 perte non signalée | S | décision Moussa sur le seuil — active le `it.todo` |
-| 5 | **TER-1** | Territory/partners : renvoyer 400 (et non 500) sur nom de zone déjà pris en modification | 🟡 erreur 500 visible | S | aucune |
+| 5 | **TER-1** ✅ (codé 11/11/2026, à valider) | Territory/partners : renvoyer 400 (et non 500) sur nom de zone déjà pris en modification | 🟡 erreur 500 visible | S | aucune |
 | 6 | **ITM-1** | Items : valider `missionTypes` contre `MISSION_TYPES`, refuser qu'un type appartienne à deux items, valider le contenu de `teamComposition` | 🟠 navigation par item incohérente | S | aucune |
 | 7 | **PRC-2** ✅ (réglé par la cascade, `b75e8d3`) | Pricing : refuser les cycles dans la chaîne et les périodes d'effet qui se chevauchent pour un même couple parent/enfant/prestation | 🔴 cascade indéterminée | M | migration 020 (`prestation_key`) + `computeCascade` |
 | 8 | **PER-1** | Permanence : jours fériés paramétrables par année (Pâques, Ascension, Pentecôte calculés ; Korité, Tabaski, Maouloud, Tamkharit saisis) — aujourd'hui figés sur 2026 | 🟠 calendrier faux dès 2027 | M | table ou paramètre tenant pour les fêtes lunaires |
@@ -24,6 +24,7 @@
 | 10 | **PAR-1** | Partners : `exclusiveZone` → lien vers `zones` (FK) ; rendre `level` et `parentPartnerId` modifiables via l'API | 🟠 chaîne de sous-traitance non éditable | M | migration de données (texte → zone_id) ; utile à la cascade |
 | 11 | **PAY-2** | Payroll : calculer le revenu depuis les missions validées de la période et déduire les charges (carburant, mécanique, location) avant 65/35 | 🔴 revenu saisi à la main | L | `computeCascade` + frais de mission (L3) ; règles de déduction à confirmer |
 | 12 | **UI-1** (trouvé 11/11/2026) | `/remuneration` : le badge « Brouillon » est en ambre `#f5a623`, couleur réservée aux sorties IA (charte) → couleur neutre (gris) | 🟡 charte graphique | S | prochain lot UI |
+| 12b | **UI-1b** (trouvé 11/11/2026) | `/rapports/performance` : le taux global est affiché en ambre `#f5a623` (réservé IA) → couleur neutre | 🟡 charte graphique | S | même lot que UI-1 |
 
 ## Ordre proposé
 

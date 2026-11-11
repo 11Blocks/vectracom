@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Post, Put, Param } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { Module } from '@nestjs/common';
 import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { Roles, UserRole } from '../../common/decorators/roles.decorator';
@@ -8,6 +8,9 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Zone } from './entities/zone.entity';
 import { Pilote, PILOTE_TYPES } from './entities/pilote.entity';
 import { assertTenantIds } from '../../common/tenant-ids';
+
+/** Message unique pour un nom de zone en doublon (création, modification, course). */
+export const ZONE_NAME_TAKEN = 'Nom de zone déjà utilisé';
 
 class CreateZoneDto {
   @IsString() @MinLength(2) name!: string;
@@ -33,11 +36,8 @@ export class ZonesController {
   @Post()
   async create(@CurrentUser('companyId') companyId: string | null, @Body() dto: CreateZoneDto) {
     this.requireTenant(companyId);
-    const name = dto.name.trim();
-    if (await this.repo.findOne({ where: { companyId: companyId!, name } })) {
-      throw new BadRequestException(`La zone « ${name} » existe déjà`);
-    }
-    return this.repo.save(this.repo.create({ companyId: companyId!, name, code: dto.code ?? null }));
+    const name = await this.checkName(companyId!, dto.name, null);
+    return this.saveZone(this.repo.create({ companyId: companyId!, name, code: dto.code ?? null }));
   }
 
   @Put(':id')
@@ -45,10 +45,33 @@ export class ZonesController {
     this.requireTenant(companyId);
     const zone = await this.repo.findOne({ where: { companyId: companyId!, id } });
     if (!zone) throw new BadRequestException('Zone introuvable');
-    if (dto.name !== undefined) zone.name = dto.name;
+    if (dto.name !== undefined) zone.name = await this.checkName(companyId!, dto.name, zone.id);
     if (dto.code !== undefined) zone.code = dto.code;
     if (dto.active !== undefined) zone.active = dto.active;
-    return this.repo.save(zone);
+    return this.saveZone(zone);
+  }
+
+  /**
+   * TER-1 : nom nettoyé (espaces), d'au moins 2 caractères, et libre dans le tenant
+   * (hors la zone modifiée elle-même). Avant, un doublon en modification
+   * remontait la contrainte uq_zone_company_name en erreur 500.
+   */
+  private async checkName(companyId: string, raw: string, selfId: string | null): Promise<string> {
+    const name = raw.trim();
+    if (name.length < 2) throw new BadRequestException('Nom de zone trop court (2 caractères minimum)');
+    const other = await this.repo.findOne({ where: { companyId, name } });
+    if (other && other.id !== selfId) throw new BadRequestException(ZONE_NAME_TAKEN);
+    return name;
+  }
+
+  /** Filet de sécurité : deux enregistrements simultanés du même nom → 400, pas 500. */
+  private async saveZone(zone: Zone): Promise<Zone> {
+    try {
+      return await this.repo.save(zone);
+    } catch (e) {
+      if (e instanceof QueryFailedError && (e as any).code === '23505') throw new BadRequestException(ZONE_NAME_TAKEN);
+      throw e;
+    }
   }
 
   private requireTenant(companyId: string | null): void {

@@ -83,6 +83,9 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - **Règles de cascade — limites acceptées** (décision Moussa, 11/11/2026) :
   - (c) Deux créations simultanées avec dates différentes ne sont pas bloquées par l'index (seul un doublon exact de date de début l'est ; le chevauchement est contrôlé par l'API, pas par la base). Risque accepté (1 admin).
   - (d) En modification, item/parent/enfant ne sont pas modifiables (historique propre). Désactiver + recréer.
+- **Zones — nom unique** (TER-1, 11/11/2026) : création et modification passent par la même vérification (nom nettoyé des espaces, unique dans le tenant ; erreur 23505 de la base → même 400). Changements de comportement :
+  - TER-1a : en création, le message « La zone « X » existe déjà » devient « Nom de zone déjà utilisé » (uniformisation).
+  - TER-1b : en modification, un nom vide ou d'un seul caractère est maintenant refusé (400), alors qu'il était accepté avant.
 - **Contrainte `pricing_rules`** : la contrainte d'unicité de `pricing_rules` s'appelle `pricing_rules_company_id_parent_partner_id_child_partner_id_key` (créée par 012 sans nom ; le `@Unique('uq_pricing_rule')` de l'ancienne entité ne correspondait pas à la base). La migration 020 la retrouve par type (`contype = 'u'`), pas par nom, et la remplace par l'index `uq_pricing_rule_v2` (NULLS NOT DISTINCT). Ne pas la renommer.
 - **Visibilité de la rémunération** (décision Moussa, 10/11/2026) : **chacun ne voit que ce qui le concerne**. Le chef d'équipe voit uniquement sa part, le binôme uniquement la sienne ; admin et direction voient tout. À appliquer côté API (pas seulement dans l'écran) pour L8 mobile.
 - **IA** : propose, ne décide jamais — validation humaine obligatoire.
@@ -168,5 +171,6 @@ Interlocuteurs : **Moussa (Green-T)** valide techniquement ; le **directeur ONEC
 | Q7 | « S+I APP » est-il une variante appartement de `survey + installation` ? Si oui, quelle clé ? | taux 80 % par prestation |
 | Q8 | « PASSAGE » correspond-il à `deplacement sav` ou à une autre clé ? | taux 87 % par prestation |
 | Q9 | Une règle de cascade qui pointe vers un partenaire **désactivé** doit-elle continuer à s'appliquer, ou être ignorée ? Par défaut : elle s'applique (comportement actuel). À trancher. 🟡 | cascade |
+| Seuil | **Décision Moussa** (pas le directeur) : seuil de pertes à 10,0 % pile — alerte (`>=`) ou non (`>`) ? **`>=` provisoire** depuis le 10/11/2026 (`purchases/loss-rate.ts`), à trancher après la réponse à Q_B2 ou plus tôt. | L5 / STK-1 |
 
 Ne pas implémenter de choix sur ces points sans réponse ; si une hypothèse par défaut est utilisée, la rendre configurable et la signaler.
