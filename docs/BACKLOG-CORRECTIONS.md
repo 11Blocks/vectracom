@@ -8,7 +8,8 @@
 
 | Rang | ID | Correction | Sévérité | Effort | Dépendances |
 |---|---|---|---|---|---|
-| 1 | **MIG-1** | `apply-migrations.sh` : appliquer 001→019 (et les suivantes), en `-1 -v ON_ERROR_STOP=1`, au lieu de 001→005 avec erreurs ignorées | 🔴 une installation neuve n'a pas les tables L0–L7 | S | aucune |
+| 1 | **MIG-1** (codé 11/11/2026, à valider) | `apply-migrations.sh` : appliquer 001→019 (et les suivantes), en `-1 -v ON_ERROR_STOP=1`, au lieu de 001→005 avec erreurs ignorées | 🔴 une installation neuve n'a pas les tables L0–L7 | S | aucune |
+| 1b | **MIG-2** (trouvé 11/11/2026) | Dérive de schéma : 14 tables (chat_*, daily_*, dispositif_entries, geofence_zones, geopositions, rag_*, recruitment_candidates, settings_change_logs, vehicle_events, vision_uploads) n'ont aucune migration ; une base neuve échoue à 011. Rattrapage : `CREATE TABLE IF NOT EXISTS recruitment_candidates` en tête de 011 + migration 021 recréant les 13 autres à l'identique du schéma prod (lecture seule `pg_dump -s`), sans effet sur dev/prod | 🔴 installation neuve impossible | M | MIG-1 |
 | 2 | **PAY-1** | Payroll : refuser toute modification d'une feuille au statut `validee` (400) | 🔴 une paie validée peut être réécrite | S | aucune — active le `it.todo` correspondant |
 | 3 | **PRC-1** | Pricing : pourcentage ≤ 100, revalidé aussi en modification (aujourd'hui ≤ 1000, et `update` accepte NaN) ; parent ≠ enfant ; `effectiveFrom` ≤ `effectiveTo` | 🔴 règle de cascade aberrante possible | S | à faire avec la cascade (`computeCascade`) |
 | 4 | **STK-1** | Pertes : alerte si 0 entrée et pertes > 0 ; trancher définitivement le seuil `>=` (provisoire) ou `>` | 🟠 perte non signalée | S | décision Moussa sur le seuil — active le `it.todo` |

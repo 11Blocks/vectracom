@@ -1,50 +1,77 @@
 #!/usr/bin/env bash
-# Apply VECTRACOM SQL migrations in order (idempotent).
-# Usage: ./scripts/apply-migrations.sh [container_name]
+# VECTRACOM — applique TOUTES les migrations SQL, dans l'ordre, en mode strict.
+#
+# Usage : ./scripts/apply-migrations.sh [conteneur] [base]
+#   conteneur : conteneur PostgreSQL (défaut : vectracom-postgres)
+#   base      : base cible           (défaut : vectracom)
+#   DB_USER   : variable d'environnement, rôle PostgreSQL (défaut : vectracom)
+#
+# Mode strict :
+#   - chaque fichier est exécuté dans UNE transaction (psql -1) avec ON_ERROR_STOP=1 :
+#     au moindre échec, le fichier est entièrement annulé et le script s'arrête ;
+#   - les migrations sont découvertes automatiquement (infra/postgres/migrations/NNN_*.sql) ;
+#     la numérotation doit être continue (001, 002, …) et sans doublon.
+#
+# Toutes les migrations sont idempotentes : le script peut être relancé sur une
+# base déjà à jour.
+# ⚠️ Sur une base VIDE, le script s'arrête à 011 : 14 tables créées autrefois par
+# TypeORM synchronize n'ont pas de migration (voir CLAUDE.md §4, « Dérive de schéma »).
+# ⚠️ 013 normalise des données de missions (type_tache) : ne pas lancer sur une
+# base de dev sans accord. Jamais sur le VPS sans accord.
 set -euo pipefail
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONTAINER="${1:-vectracom-postgres}"
+DB="${2:-vectracom}"
+DB_USER="${DB_USER:-vectracom}"
 MIG_DIR="$ROOT/infra/postgres/migrations"
 
-echo "=== Apply migrations → $CONTAINER ==="
+shopt -s nullglob
+files=("$MIG_DIR"/[0-9][0-9][0-9]_*.sql)
+shopt -u nullglob
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "!! aucune migration trouvée dans $MIG_DIR" >&2
+  exit 1
+fi
+
+# Numérotation continue et sans doublon (le glob est déjà trié).
+expected=1
+for f in "${files[@]}"; do
+  num=$((10#$(basename "$f" | cut -c1-3)))
+  if [ "$num" -lt "$expected" ]; then
+    echo "!! numéro en double : $(basename "$f") (le numéro $(printf '%03d' "$num") est déjà utilisé)" >&2
+    exit 1
+  elif [ "$num" -gt "$expected" ]; then
+    echo "!! numérotation incohérente : $(basename "$f") (attendu $(printf '%03d' "$expected"), migration manquante)" >&2
+    exit 1
+  fi
+  expected=$((expected + 1))
+done
 
 run_sql() {
-  local file="$1"
-  local size
-  size=$(wc -c < "$file" | tr -d ' ')
-  if [ "$size" -eq 0 ]; then
-    echo "  skip (empty): $(basename "$file")"
-    return 0
+  local file="$1" out
+  if [ ! -s "$file" ]; then
+    echo "!! fichier vide : $(basename "$file")" >&2
+    return 1
   fi
-  echo "  apply: $(basename "$file")"
-  docker exec -i "$CONTAINER" psql -U vectracom -d vectracom -v ON_ERROR_STOP=0 < "$file" >/tmp/vectracom-mig.out 2>&1 || true
-  # Ignore "already exists" noise; fail on unexpected errors
-  if grep -qiE 'ERROR:.*(syntax|permission|fatal)' /tmp/vectracom-mig.out; then
-    echo "  !! errors in $(basename "$file"):"
-    grep -i error /tmp/vectracom-mig.out | head -20
+  if ! out=$(docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB" -1 -q -v ON_ERROR_STOP=1 < "$file" 2>&1); then
+    echo "!! ÉCHEC : $(basename "$file") — transaction annulée, arrêt." >&2
+    printf '%s\n' "$out" | grep -v '^NOTICE:' | head -20 >&2
     return 1
   fi
 }
 
-# Extensions first
+echo "=== Migrations → $CONTAINER / base $DB (${#files[@]} fichiers, mode strict)"
+
+# Extensions d'abord (uuid-ossp, pg_trgm, unaccent).
 if [ -f "$ROOT/infra/postgres/init.sql" ]; then
+  echo "  init.sql"
   run_sql "$ROOT/infra/postgres/init.sql"
 fi
 
-# Ordered real migrations (prefer drift files over empty stubs)
-for f in \
-  "$MIG_DIR/001_initial_schema.sql" \
-  "$MIG_DIR/002_schema_drift_kpi_partners.sql" \
-  "$MIG_DIR/003_schema_drift_stock_compliance.sql" \
-  "$MIG_DIR/004_field_report_sav.sql" \
-  "$MIG_DIR/005_admin_accounts.sql"
-do
-  if [ -f "$f" ]; then
-    run_sql "$f"
-  else
-    echo "  missing: $f"
-    exit 1
-  fi
+for f in "${files[@]}"; do
+  echo "  $(basename "$f")"
+  run_sql "$f"
 done
 
-echo "=== Migrations done ==="
+echo "=== ${#files[@]} migrations appliquées sans erreur"

@@ -57,10 +57,13 @@ cd backend && npm test                       # Jest — aucun spec pour l'instan
 SKIP_PLANNING=1 node backend/scripts/fill-platform-pipeline.cjs   # rejouer le pipeline de données
 ```
 
-**Migrations** : `scripts/apply-migrations.sh` n'applique **que 001→005**. Les migrations 006→019 s'appliquent une par une :
+**Migrations** : `scripts/apply-migrations.sh [conteneur] [base]` applique **toutes** les migrations `infra/postgres/migrations/NNN_*.sql` (découverte automatique, numérotation continue vérifiée), chacune dans une transaction en mode strict (`-1 -v ON_ERROR_STOP=1`) : au premier échec, le fichier est annulé et le script s'arrête. Toutes les migrations sont idempotentes (relance sans risque).
 ```bash
-docker exec -i vectracom-postgres psql -U vectracom -d vectracom -1 -v ON_ERROR_STOP=1 < infra/postgres/migrations/0XX_….sql
+bash scripts/apply-migrations.sh vectracom-postgres vectracom      # base locale par défaut
 ```
+⚠️ La base de dev locale n'a que 001→011 (au 11/11/2026) ; la 013 normalise des données de missions : ne pas lancer sur la base de dev sans accord. En prod, appliquer une migration seule, après sauvegarde, comme décrit au §8.
+
+❌ **Dérive de schéma (constatée le 11/11/2026)** : une base **neuve** ne peut pas être construite par les migrations seules. 14 tables existent en dev et en prod (créées par TypeORM `synchronize` en dev, puis copiées en prod par dump) sans aucune migration : `chat_memberships`, `chat_messages`, `chat_rooms`, `daily_attendances`, `daily_workers`, `dispositif_entries`, `geofence_zones`, `geopositions`, `rag_chunks`, `rag_documents`, `recruitment_candidates`, `settings_change_logs`, `vehicle_events`, `vision_uploads`. Sur une base vide, le script s'arrête à `011_hr.sql` (`recruitment_candidates` absente). Ne jamais lancer le backend avec `synchronize` contre une base partagée ; toute nouvelle table passe par une migration.
 
 Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` (super admin). Mots de passe : voir la baseline Cursor — ne pas les recopier ailleurs.
 
