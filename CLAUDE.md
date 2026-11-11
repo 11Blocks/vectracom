@@ -115,13 +115,13 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - Puis rebuild **du seul service modifié** : `docker compose build backend && docker compose up -d --no-deps backend`, health `GET /api/v1/health` (interne `127.0.0.1:3100` et public). Le log « localhost:3000 » est le port interne du conteneur (mappé sur 3100), pas TrackIT.
 - Retour arrière : `docker tag vectracom-backend:rollback-<date> vectracom-backend && docker compose up -d --no-deps backend`.
 - Pas de hash git sur le VPS : la version en prod se déduit par `md5sum`.
-- Dernier déploiement (10/11/2026, 20:38) : backend = `7bcbe28` (isolation tenant), web = `9be5537`. Sauvegarde : `~/backups/vectracom_20261110/`.
+- Dernier déploiement (11/11/2026, 11:30) : backend et web = `de5508c` (cascade tarifaire + simulation), migration 020 appliquée en prod. Sauvegarde : `~/backups/vectracom_20261111/` (images `rollback-20261111`).
 
 ## 9. État d'avancement (évolution « réunion directeur »)
 
 | Lot | Contenu | État |
 |---|---|---|
-| L0 | Item (6 domaines), Zone, Pilote, cascade tarifaire | ✅ CRUD + **calcul de cascade** (`pricing/cascade.ts`, `GET /pricing-rules/simulate`, panneau sur `/partenaires`, validations %/cycles/dates/chevauchements) — ⚠️ migration 020 (`prestation_key`) **à appliquer en prod** ; **factures non branchées** (accord Moussa requis : risque de double réduction) ; prestations Q7/Q8 en attente |
+| L0 | Item (6 domaines), Zone, Pilote, cascade tarifaire | ✅ CRUD + **calcul de cascade** (`pricing/cascade.ts`, `GET /pricing-rules/simulate`, panneau sur `/partenaires`, validations %/cycles/dates/chevauchements) — ✅ migration 020 appliquée et déployée en prod le 11/11/2026 ; **factures non branchées** (accord Moussa requis : risque de double réduction) ; prestations Q7/Q8 en attente |
 | L1 | Normalisation tâches SONATEL + « -OT » | ✅ — import 5 feuilles **partiel** (C1) |
 | L2 | Permanence SAV/PROD, filtres, rajouts, levée blocages | ✅ |
 | L3 | Renforts zone→zone + frais de mission | ✅ |
