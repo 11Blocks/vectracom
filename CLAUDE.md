@@ -1,16 +1,90 @@
 # CLAUDE.md — VECTRACOM
 
-> Référence pour toute session Claude Code. Mis à jour le 10/11/2026.
+> Référence pour toute session Claude Code. Mis à jour le 11/11/2026.
 > Sources : `AGENT.md`, `.cursor/rules/vectracom-validated-baseline.mdc`, `docs/PLAN-INTEGRATION-EVOLUTION-DIRECTEUR.md`, `docs/RAPPORT-VERIFICATION-L0-L7.md`.
 
 ## 1. Projet en bref
 
 - SaaS multi-tenant de gestion des opérations terrain pour sous-traitants télécom de **SONATEL**.
 - Éditeur : **Green-T** · client pilote : **ONECOMIT** (3STB).
-- 20 modules : import planning SONATEL, missions offline-first, stock, véhicules, RH, comptabilité, facturation, KPI, incidents PBO/PIO/Chambre, IA Vision, abonnements SaaS, monitoring.
+- Contexte métier (données réelles), priorités et règles de flexibilité : voir **§1b**, **§1c** et **§12**.
+- 20 modules dans le code (14 présentés au directeur, voir §1b) : import planning SONATEL, missions offline-first, stock, véhicules, RH, comptabilité, facturation, KPI, incidents PBO/PIO/Chambre, IA Vision, abonnements SaaS, monitoring.
 - IA en **mode règles** tant que `GEMINI_API_KEY` / YOLO ne sont pas configurés (`GET ai/status`).
 - Prod : **https://vectracom.track-it.org** (VPS partagé avec TrackIT).
 - GitHub : `11Blocks/vectracom`, branche `main`.
+
+## 1b. Contexte métier ONECOMIT — données réelles (11/11/2026)
+
+> Sources : document de cadrage « VECTRACOM — Présentation à la Direction d'ONECOMIT » (PDF, septembre 2026) et précisions de Moussa (Green-T) du 11/11/2026, issues de la revue du directeur ONECOMIT. **Ce sont des faits, pas des hypothèses.** Ils décrivent la situation actuelle ; le code doit rester configurable (voir §12).
+
+### Chaîne de sous-traitance
+- ONECOMIT est **sous-traitant** de SONATEL via Sofatelcom **et donneur d'ordre** pour ses propres sous-traitants (ABC SARL…), à qui il remet un **bordereau de prix de sous-traitance**.
+- Règles de cascade en prod (vérifiées le 11/11/2026) : SONATEL → SOFATELCOM **100 %** · SOFATELCOM → ONECOMIT **65 %** · ONECOMIT → ABC SARL **80 %**. Exemple : **27 000 → 17 550 → 14 040** (au franc près, pas d'arrondi au millier).
+- Pilotes : pilotes SONATEL et pilotes « REGIS » (Sofatelcom).
+
+### Les 6 items (domaines) et la composition réelle des équipes
+| Item | Composition actuelle | Agents | Types de mission (code) |
+|---|---|---|---|
+| FTTH | 1 chef, 1 binôme, 1 stagiaire | 2–3 | INSTALLATION, SURVEY, SAV, SURVEY_OSM |
+| INFRA | 1 chef, 1 binôme, 1 stagiaire | 2–3 | INFRA |
+| PP & GC | 1 chef, 1 binôme, 2 journaliers | 4 | PLANTATION, GC, DEVOIEMENT |
+| EXT / DENSIF (+ OSM) | 2 chefs tireurs, 1 chef raccordeur, 4 journaliers | 7 | DENSIFICATION, OSM |
+| DÉPLOIEMENT | 2 chefs tireurs, 1 chef raccordeur, 4 journaliers | 7 | DEPLOIEMENT |
+| BTS | 1 chef, 1 binôme, 1 stagiaire | 2–3 | BTS |
+
+Il y a 6 items (et non 3). La composition est stockée en base (`items.team_composition`, seed `seed-items.ts`), pas dans le code.
+
+### Zones — deux notions distinctes, toutes deux réelles
+- **Zones OLT (réseau SONATEL)** : 13 zones des dashboards de performance — Thiaroye, Mbour, Kaolack, Touba, Kaffrine, Fatick, Popenguine, Koungheul, Sokone, Nioro, Fimela, Porokhane, Mbodjene. Servent au suivi (Dashboard_OLT).
+- **Zones d'affectation (SOFATELCOM)** : 4 zones — Mbour, Thiès, Tivaouane, + 1 (à préciser). Les équipes y sont affectées **de manière permanente** ; en cas de surcharge, **renfort** d'une zone à l'autre (module renforts).
+- En base : table `zones` (18 zones en prod au 03/10/2026), configurable par tenant.
+
+### Équipes
+- Plus de **80 équipes** (ou binômes) sur le terrain, chacune pilotée par un chef d'équipe. Les noms figurent dans les données et le PDF ; **ne pas les recopier dans le dépôt** (données personnelles).
+
+### Les 9 types d'intervention métier et leurs 12 valeurs dans le code
+| Type métier (PDF) | Valeur(s) `MISSION_TYPES` | Formulaire (étapes) |
+|---|---|---|
+| SURVEY | SURVEY (+ SURVEY_OSM pour l'étude OSM) | 5 : client, réseau, qualité ADSL, accessoires, résultat |
+| INSTALLATION / raccordement | INSTALLATION | 6 : SST (bloquant), identification + GPS, technique (dBm), 4 photos, matériel, clôture (signature) |
+| SAV / dépannage | SAV | 5 : client, constat, tests, remplacement, signature |
+| INFRA / réseau | INFRA | 5 : identification, incident (codes A00, A03, A07, B13…), matériel, photos, clôture |
+| OSM | OSM | 5 : identification, travaux, mesures, photos, recette (signature SONATEL + 3STB) |
+| Plantation de poteaux | PLANTATION | 4 : localisation, poteaux, photos, validation |
+| Génie civil | GC | 4 : localisation, travaux, photos avant/pendant/après, validation |
+| Déploiement / extension / densification | DEPLOIEMENT, DENSIFICATION | — |
+| Dévoiement | DEVOIEMENT | — |
+| (item BTS, ajouté par le directeur, absent du PDF) | BTS | — |
+
+`AGENT.md` parle de 11 types : il date d'avant l'ajout de BTS. La référence du code est `MISSION_TYPES` (12 valeurs).
+
+### Processus
+1. **Import du planning SONATEL** : Excel multi-onglets ; colonnes OLT, Demande, ND, Commande client (FIB_KHE, FIB_PRO_M_B…), Date validation, Âge, Nom et contact client, Date d'intervention, Tâches, Équipe, Statut (OK/NOK), Commentaires. Libellés repris à l'identique (§5).
+2. **Exécution terrain** : le chef d'équipe se rend sur site (camionnette), exécute et remplit le formulaire du type de mission.
+3. **Suivi** : dashboards Excel DAILY, Dashboard (par équipe), Dashboard_OLT (par zone) — taux de réussite et raisons d'échec.
+4. **Facturation** : bordereau de prix de **52 items** (catégories OSM, GC, DENSIF, DÉPLOIEMENT…).
+- Sources actuelles remplacées : fiches SAV / Survey / INFRA (PDF SENPLIPRO), fiches OSM, fiches de chantier, fiches de validation des équipes (Excel).
+
+### Les 14 modules présentés au directeur et les 20 du code
+- PDF (14) : authentification & rôles · équipes & techniciens · console Green-T · dashboard direction · planning + import SONATEL · missions terrain · stock · véhicules · conformité SONATEL · RH · comptabilité opérationnelle · rapports · notifications · couche IA.
+- Code (20, `AGENT.md`) : la console Green-T est incluse dans « authentification & rôles », le dashboard direction dans rapports/KPI. Modules du code **en plus** du PDF : fiches de chantier, facturation client, KPI SONATEL, incidents & alertes réseau, IA Vision, abonnements SaaS, business monitoring, plateforme monitoring.
+
+### Principes promis au directeur
+- « Si le chef d'équipe n'utilise pas l'application chaque jour, le reste ne crée pas de valeur. »
+- Mobile ultra-léger (< 40 Mo, ouverture < 1 s, 4 onglets max par rôle) · offline-first · multi-tenant strict · l'IA propose, ne décide jamais.
+
+### Chat Matrix (remplacement de WhatsApp)
+- Promesse : chat interne lié aux missions et incidents, serveur Dendrite + pont `mautrix-whatsapp`, ~10 jours (PDF). Choisi plutôt que Rocket.Chat (SDK React Native, offline, pont WhatsApp).
+- Dans le code : `infra/dendrite/`, `infra/mautrix-whatsapp/`, module `backend/src/modules/chat` (salons `matrix_room_id`, `matrix_event_id`), écrans mobiles Messages / Conversation. **Niveau d'avancement réel : à évaluer** (lecture seule).
+
+### Stock — les 5 rubriques (B2)
+Stock · Focus Stock · Suivi Consommation · Comptabilité Matière · Ventilation aux Équipes. Les 5 rubriques sont réelles ; **leur filtrage par item est une hypothèse de travail**, à confirmer par le directeur (Q_B2) — rien n'est codé.
+
+## 1c. Priorités actuelles (11/11/2026)
+1. **S0** — faille chef d'équipe (§9) : à corriger en premier.
+2. **Questions au directeur** (§11, `docs/QUESTIONS-DIRECTEUR-ONECOMIT.md`) : envoi par Moussa.
+3. **Chat Matrix** : évaluer l'existant, puis compléter.
+4. **L8 mobile — plus tard** : le plan est prêt, **on ne code pas maintenant**. Le mobile n'est pas prioritaire.
 
 ## 2. Stack et ports
 
@@ -133,6 +207,7 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - Dernier déploiement (11/11/2026, 11:30) : backend et web = `de5508c` (cascade tarifaire + simulation), migration 020 appliquée en prod. Sauvegarde : `~/backups/vectracom_20261111/` (images `rollback-20261111`).
 - 11/11/2026, 13:15 : fichiers de `a17dc04` envoyés (migrations, schéma de référence, script, docs) et migration 021 appliquée en prod — sans effet, comme attendu (243 index, 164 contraintes, 80 tables, 1 090 colonnes avant et après). Sauvegarde : `~/backups/vectracom_20261111b/`. **Ne pas relancer 011 en prod** (son `UPDATE employees` recalcule les statuts « en congé »).
 - 11/11/2026, 17:05 : backend et web = `a72cdbc` (PAY-1, STK-1, TER-1, ITM-1), sans migration. Sauvegarde : `~/backups/vectracom_20261111c/` (images `rollback-20261111c`).
+- 11/11/2026, 17:50 : web seul = `262ba05` (UI-1, UI-1b, UI-1c) ; backend inchangé (`a72cdbc`). Sauvegarde : `~/backups/vectracom_20261111d/` (image `vectracom-web-admin:rollback-20261111d`).
 
 ## 9. État d'avancement (évolution « réunion directeur »)
 
@@ -146,9 +221,11 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 | L5 | Achats validés SONATEL + pertes (seuil 10 %) | ✅ — 3 rubriques stock sur 5 (B2) |
 | L6 | Rémunération 65/35 | ✅ — pas de facturation par équipe (C2) |
 | L7 | Cartographie zones + classement + satisfaction client | ✅ |
-| L8 | Mobile : réplication des lots L0–L7 | ⏳ socle mobile OK, aucun écran L0–L7 |
+| L8 | Mobile : réplication des lots L0–L7 | ⏳ socle mobile OK, aucun écran L0–L7 — **plan prêt, non prioritaire** (§1c) |
+| S0 | Faille chef d'équipe : `POST /missions/:id/lever-blocage` et `GET /missions` ne limitent pas le chef à son équipe — un chef peut voir et débloquer les missions de **toutes** les équipes du tenant | ❌ **priorité 1** (§1c) |
+| Matrix | Chat interne (Dendrite + `mautrix-whatsapp`) en remplacement de WhatsApp | ⚠️ code présent (`infra/dendrite`, `infra/mautrix-whatsapp`, module `chat`), avancement réel **à évaluer** |
 
-Dette connue : aucun test unitaire ; modules L0–L7 avec peu de validations métier (IDs non vérifiés contre le tenant dans pricing, permanence, payroll, renforts, expenses, teams) ; jours fériés mobiles codés en dur pour 2026.
+Dette connue (11/11/2026) : isolation tenant corrigée et déployée ; 148 tests unitaires (aucun côté mobile) ; reste S0 ci-dessus, les listes figées du §12 et le backlog (`docs/BACKLOG-CORRECTIONS.md` : MIG-4a/4b, PER-1/2, PAR-1, PAY-2, UI-2).
 
 ## 10. Documents de référence
 
@@ -157,6 +234,9 @@ Dette connue : aucun test unitaire ; modules L0–L7 avec peu de validations mé
 - `docs/PLAN-INTEGRATION-EVOLUTION-DIRECTEUR.md` — taxonomie Item, cascade, lots L0→L8.
 - `docs/RAPPORT-VERIFICATION-L0-L7.md` — vérification prod et trous restants.
 - `docs/CAHIER-V2-REALITE-TERRAIN.md`, `docs/CAHIER-DES-CHARGES-COMPLEMENTAIRE.md`, `API_GUIDE.md`, `USER_GUIDE.md`.
+- `docs/QUESTIONS-DIRECTEUR-ONECOMIT.md` — les 10 points métier en attente (message prêt à envoyer).
+- `docs/BACKLOG-CORRECTIONS.md` — corrections secondaires priorisées.
+- Document de cadrage présenté au directeur (PDF, septembre 2026, **hors dépôt**) : `C:\Users\USER\Documents\MYWORKSPACE\VECTRACOM\guide utilisateur\VECTRACOM — Présentation à la Direction d'ONECOMIT.pdf`. Résumé dans §1b. Sa section « Statut » est dépassée (le DNS `vectracom.track-it.org` est en ligne).
 
 ## 11. Contacts / questions en attente
 
@@ -164,7 +244,7 @@ Interlocuteurs : **Moussa (Green-T)** valide techniquement ; le **directeur ONEC
 
 | # | Question | Bloque |
 |---|---|---|
-| B2 | Rubriques supposées : Stock, Focus Stock, Suivi Consommation, Comptabilité Matière, Ventilation aux Équipes. **Q_B2** : filtrées par item ou globales ? Hypothèse de travail « par item » — **ne rien coder avant confirmation** | L5 |
+| B2 | Les 5 rubriques (réelles) : Stock, Focus Stock, Suivi Consommation, Comptabilité Matière, Ventilation aux Équipes. **Q_B2** : filtrées par item ou globales ? Hypothèse de travail « par item » — **ne rien coder avant confirmation** | L5 |
 | C1 | Import « 5 feuilles à l'identique » : quelles feuilles, quelles colonnes, quel comportement en cas de surcharge ? | L1 |
 | C2 | Faut-il une facturation par équipe/groupe (en plus de la facture par client) ? | L6 |
 | Q1 | Format `zone x/y` : équipes prévues/affectées, ou équipes/instances ? | L0/L7 |
@@ -174,6 +254,43 @@ Interlocuteurs : **Moussa (Green-T)** valide techniquement ; le **directeur ONEC
 | Q7 | « S+I APP » est-il une variante appartement de `survey + installation` ? Si oui, quelle clé ? | taux 80 % par prestation |
 | Q8 | « PASSAGE » correspond-il à `deplacement sav` ou à une autre clé ? | taux 87 % par prestation |
 | Q9 | Une règle de cascade qui pointe vers un partenaire **désactivé** doit-elle continuer à s'appliquer, ou être ignorée ? Par défaut : elle s'applique (comportement actuel). À trancher. 🟡 | cascade |
+| Zone | Quelle est la **4ᵉ zone d'affectation SOFATELCOM** (Mbour, Thiès, Tivaouane, + ?) | §1b |
+| L8-1 | Les binômes ont-ils un compte ? Avec quel rôle ? Par défaut : seuls les chefs ont un compte. | L8 |
+| L8-2 | Rémunération mobile : le chef voit-il le revenu de l'équipe et le pourcentage (qui permettent de recalculer la part de l'autre) ? Par défaut : seulement son montant et le statut. | L8 |
+| L8-3 | Frais de mission : écran séparé de « Dépense » (comptabilité) ? Par défaut : deux écrans distincts. | L8 |
+| L8-4 | Un chef peut-il modifier ou supprimer un frais saisi ? Par défaut : le jour même seulement. | L8 |
+| L8-5 | S0 corrigé à part, avant L8 ? **Tranché : oui** (§1c). | S0 |
 | Seuil | **Décision Moussa** (pas le directeur) : seuil de pertes à 10,0 % pile — alerte (`>=`) ou non (`>`) ? **`>=` provisoire** depuis le 10/11/2026 (`purchases/loss-rate.ts`), à trancher après la réponse à Q_B2 ou plus tôt. | L5 / STK-1 |
 
 Ne pas implémenter de choix sur ces points sans réponse ; si une hypothèse par défaut est utilisée, la rendre configurable et la signaler.
+
+## 12. Ce que Claude ne doit pas deviner — et contrainte de flexibilité
+
+### Ne jamais deviner (lire §1b, §5, §11 ou demander)
+- La composition des équipes par item et le nombre d'agents.
+- Les zones (OLT et zones d'affectation SOFATELCOM) et la 4ᵉ zone SOFATELCOM, encore à préciser.
+- La chaîne de sous-traitance et les pourcentages.
+- La règle de visibilité « chacun ne voit que ce qui le concerne », à appliquer côté API (§5).
+- Le fait que le mobile n'est pas prioritaire (§1c).
+- Le seuil de pertes `>=` 10 %, provisoire (§11).
+- Toute réponse métier encore ouverte (§11) : poser la question, ne pas supposer.
+
+### Flexibilité : exigence de conception, pas une alternative aux données réelles
+Les chiffres de §1b sont la réalité actuelle d'ONECOMIT ; le code doit pourtant accepter d'autres configurations (3, 5, 10 agents ; 2, 6 zones ; 1, 3 chefs…) **sans modification de code**.
+- Jamais de logique liée à un nombre ou à un nom réel : pas de `if (agents.length === 7)`, pas de `const ZONES = ['Mbour', …]`.
+- Les données réelles vivent en **base ou en configuration** (seed, table, JSON) : compositions dans `items.team_composition`, zones dans `zones`, pourcentages dans `pricing_rules`, répartition chef/binôme dans `teams.repartition_chef_pct`.
+- Le code lit ces valeurs, il ne les connaît pas.
+
+Listes encore figées dans le code (constat du 11/11/2026, à rendre configurables si le métier l'exige ; voir backlog) :
+| Liste | Où | Effet |
+|---|---|---|
+| `ITEM_CODES` (6 items) | `items/entities/item.entity.ts`, validé par `@IsIn` | un 7ᵉ item demande une modification de code |
+| `MISSION_TYPES` (12) | `missions/entities/mission-type-template.entity.ts` | idem pour un nouveau type |
+| `EQUIPE_ROLES` (7 rôles) | `items/entities/item.entity.ts` | idem pour un nouveau rôle d'équipe |
+| `PRICE_GRIDS` (2 grilles) | `partners/entities/partner.entity.ts` | idem pour une 3ᵉ grille |
+| `PRESTATIONS` (6 clés) | `pricing/prestations.ts` | volontaire : alignées sur les factures |
+| Seuil de pertes 10 % | `purchases/loss-rate.ts` | devrait devenir un paramètre du tenant |
+| Jours fériés 2026 | `permanence/permanence.module.ts` | PER-1 |
+| Table de noms de zones | `reports/performance-dashboard.service.ts` (normalisation d'affichage) | à vérifier si de nouvelles zones apparaissent |
+
+Les listes de **statuts** (workflow : brouillon/validée, signalement/en cours…) restent dans le code : ce sont des états de l'application, pas de la configuration métier.
