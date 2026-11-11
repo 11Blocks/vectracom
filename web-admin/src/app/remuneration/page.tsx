@@ -109,7 +109,9 @@ function Content() {
                   </td>
                   <td className="px-2 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button className="text-[#7a8f80] hover:text-[#e8ede9] p-1" title="Saisir / modifier" onClick={() => setEditing(r)}><Pencil size={14} /></button>
+                      {r.status !== 'validee' && (
+                        <button className="text-[#7a8f80] hover:text-[#e8ede9] p-1" title="Saisir / modifier" onClick={() => setEditing(r)}><Pencil size={14} /></button>
+                      )}
                       {r.payrollId && r.status !== 'validee' && (
                         <button className="text-[#0f9d70] p-1" title="Valider" onClick={() => validateMut.mutate(r.payrollId)}><CheckCircle2 size={14} /></button>
                       )}

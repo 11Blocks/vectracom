@@ -1,4 +1,6 @@
+import { BadRequestException } from '@nestjs/common';
 import { computePayrollSplit, DEFAULT_CHEF_PCT, isValidPeriod } from '../../src/modules/payroll/payroll-split';
+import { PayrollService } from '../../src/modules/payroll/payroll.module';
 
 describe('Rémunération équipe — répartition chef / binôme (L6)', () => {
   it('applique 65/35 par défaut : 100 000 → 65 000 / 35 000', () => {
@@ -46,8 +48,45 @@ describe('Rémunération équipe — répartition chef / binôme (L6)', () => {
     );
   });
 
-  // À activer avec la correction secondaire « bloquer une feuille validée ».
-  it.todo('refuse la modification d’une feuille de paie au statut « validee »');
   // À activer quand le revenu sera calculé depuis les missions et les charges déduites.
   it.todo('déduit les charges (carburant, mécanique, location) avant la répartition 65/35');
+});
+
+describe('Rémunération équipe — verrouillage d’une feuille validée (PAY-1)', () => {
+  const COMPANY = '0a000000-0000-4000-8000-00000000000a';
+  const TEAM = '0a010000-0000-4000-8000-000000000001';
+
+  /** Dépôt simulé : l'équipe existe (65 %), `existing` est la feuille déjà enregistrée pour la période. */
+  function fakeRepo(existing: Record<string, unknown> | null) {
+    return {
+      query: jest.fn(async () => [{ repartition_chef_pct: 65 }]),
+      findOne: jest.fn(async () => (existing ? { ...existing } : null)),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(async (x: unknown) => x),
+    } as any;
+  }
+  const dto = { teamId: TEAM, period: '2026-10', revenue: 120_000, note: 'correction' };
+
+  it('refuse la modification d’une feuille au statut « validee » (400, rien n’est enregistré)', async () => {
+    const stored = { id: 'p1', companyId: COMPANY, teamId: TEAM, period: '2026-10', revenue: '100000', chefShare: '65000', binomeShare: '35000', status: 'validee', note: null };
+    const repo = fakeRepo(stored);
+    const svc = new PayrollService(repo);
+    await expect(svc.upsert(COMPANY, dto)).rejects.toThrow(BadRequestException);
+    await expect(svc.upsert(COMPANY, dto)).rejects.toThrow('Feuille de paie validée : modification interdite');
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('autorise la modification d’une feuille « brouillon » et recalcule le 65/35', async () => {
+    const stored = { id: 'p1', companyId: COMPANY, teamId: TEAM, period: '2026-10', revenue: '100000', chefShare: '65000', binomeShare: '35000', status: 'brouillon', note: null };
+    const repo = fakeRepo(stored);
+    const saved: any = await new PayrollService(repo).upsert(COMPANY, dto);
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect(saved).toMatchObject({ revenue: '120000', chefShare: '78000', binomeShare: '42000', status: 'brouillon', note: 'correction' });
+  });
+
+  it('crée une nouvelle feuille au statut « brouillon » quand aucune n’existe', async () => {
+    const repo = fakeRepo(null);
+    const saved: any = await new PayrollService(repo).upsert(COMPANY, dto);
+    expect(saved).toMatchObject({ status: 'brouillon', revenue: '120000', chefShare: '78000', binomeShare: '42000' });
+  });
 });

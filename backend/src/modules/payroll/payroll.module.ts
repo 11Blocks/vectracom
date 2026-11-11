@@ -83,6 +83,10 @@ export class PayrollService {
     const { chefShare, binomeShare } = computePayrollSplit(dto.revenue, chefPct);
 
     let payroll = await this.repo.findOne({ where: { companyId, teamId: dto.teamId, period: dto.period } });
+    // PAY-1 : une feuille validée est figée (montants, chef, binôme et note).
+    if (payroll && payroll.status === 'validee') {
+      throw new BadRequestException('Feuille de paie validée : modification interdite');
+    }
     if (payroll) {
       payroll.revenue = String(dto.revenue);
       payroll.chefShare = String(chefShare);
