@@ -123,6 +123,7 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - Retour arrière : `docker tag vectracom-backend:rollback-<date> vectracom-backend && docker compose up -d --no-deps backend`.
 - Pas de hash git sur le VPS : la version en prod se déduit par `md5sum`.
 - Dernier déploiement (11/11/2026, 11:30) : backend et web = `de5508c` (cascade tarifaire + simulation), migration 020 appliquée en prod. Sauvegarde : `~/backups/vectracom_20261111/` (images `rollback-20261111`).
+- 11/11/2026, 13:15 : fichiers de `a17dc04` envoyés (migrations, schéma de référence, script, docs) et migration 021 appliquée en prod — sans effet, comme attendu (243 index, 164 contraintes, 80 tables, 1 090 colonnes avant et après). Sauvegarde : `~/backups/vectracom_20261111b/`. **Ne pas relancer 011 en prod** (son `UPDATE employees` recalcule les statuts « en congé »).
 
 ## 9. État d'avancement (évolution « réunion directeur »)
 
