@@ -14,8 +14,12 @@
 #
 # Toutes les migrations sont idempotentes : le script peut être relancé sur une
 # base déjà à jour.
-# ⚠️ Sur une base VIDE, le script s'arrête à 011 : 14 tables créées autrefois par
-# TypeORM synchronize n'ont pas de migration (voir CLAUDE.md §4, « Dérive de schéma »).
+# Base NEUVE : infra/postgres/docker-init/01-schema.sql est le schéma de référence
+# (export de la structure de la prod, MIG-3) ; le conteneur l'exécute au premier
+# démarrage. Les migrations 001→021 s'appliquent ensuite par-dessus sans erreur
+# et sans changer tables ni colonnes ; 001/002 ajoutent seulement des index absents
+# de la prod (MIG-4). Sans ce schéma, 001→021 seules ne reproduisent pas les
+# colonnes de la prod (voir CLAUDE.md §4, « Dérive de schéma »).
 # ⚠️ 013 normalise des données de missions (type_tache) : ne pas lancer sur une
 # base de dev sans accord. Jamais sur le VPS sans accord.
 set -euo pipefail
