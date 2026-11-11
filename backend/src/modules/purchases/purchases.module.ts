@@ -74,7 +74,8 @@ export class PurchasesService {
 
   /**
    * Pertes matériel : ratio pertes/entrées par article, avec alerte sanction
-   * dès que le taux dépasse le seuil contractuel (10 % par défaut).
+   * dès que le taux atteint le seuil contractuel (10 % par défaut, `>=` provisoire),
+   * ou dès qu'il y a des pertes sans aucune entrée enregistrée (STK-1).
    */
   async pertesSummary(companyId: string) {
     const rows: any[] = await this.repo.query(
@@ -91,7 +92,7 @@ export class PurchasesService {
     const items = rows.map((r) => {
       const entrees = Number(r.entrees);
       const pertes = Number(r.pertes);
-      const { taux, depasseSeuil } = computeLossRate(entrees, pertes);
+      const { taux, sansEntree, depasseSeuil } = computeLossRate(entrees, pertes);
       return {
         stockItemId: r.id,
         reference: r.reference,
@@ -99,6 +100,7 @@ export class PurchasesService {
         entrees,
         pertes,
         taux,
+        sansEntree,
         depasseSeuil,
       };
     });

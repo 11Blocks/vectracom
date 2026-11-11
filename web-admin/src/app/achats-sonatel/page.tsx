@@ -83,7 +83,11 @@ function Content() {
               {depassements.map((d: any) => (
                 <div key={d.stockItemId} className="p-2.5 rounded-lg border border-[#C0392B]/40 bg-[#C0392B]/10">
                   <p className="text-xs font-medium text-[#e8ede9]">{d.designation} <span className="font-mono text-[#7a8f80]">({d.reference})</span></p>
-                  <p className="text-[10px] text-[#C0392B] mt-0.5">pertes {d.pertes} / entrées {d.entrees} = {d.taux} % &gt; {pertes.seuilPct} %</p>
+                  <p className="text-[10px] text-[#C0392B] mt-0.5">
+                    {d.sansEntree
+                      ? <>pertes {d.pertes} sans aucune entrée enregistrée — taux non calculable</>
+                      : <>pertes {d.pertes} / entrées {d.entrees} = {d.taux} % ≥ {pertes.seuilPct} %</>}
+                  </p>
                 </div>
               ))}
             </div>

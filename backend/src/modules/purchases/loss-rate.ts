@@ -8,16 +8,20 @@
 export const DEFAULT_LOSS_THRESHOLD_PCT = 10;
 
 export interface LossRate {
-  /** Taux de perte en %, arrondi au dixième. */
+  /** Taux de perte en %, arrondi au dixième (0 quand il n'y a aucune entrée). */
   taux: number;
-  /** true si le taux atteint ou dépasse le seuil (alerte sanction). */
+  /** true si des pertes existent alors qu'aucune entrée n'est enregistrée (taux non calculable). */
+  sansEntree: boolean;
+  /** true si le taux atteint ou dépasse le seuil, ou si `sansEntree` (alerte sanction). */
   depasseSeuil: boolean;
 }
 
 /**
  * Taux de perte = pertes / entrées × 100, arrondi au dixième.
- * Sans entrée, le taux vaut 0 (comportement actuel — voir le cas
- * « 0 entrée + pertes > 0 » dans les corrections secondaires).
+ *
+ * STK-1 (11/11/2026) : sans aucune entrée, le taux n'est pas calculable et vaut 0,
+ * mais des pertes réelles (> 0) déclenchent quand même l'alerte (`sansEntree`).
+ * Avant, ce cas passait inaperçu (0 % → pas d'alerte).
  */
 export function computeLossRate(
   entrees: number,
@@ -25,5 +29,6 @@ export function computeLossRate(
   seuilPct: number = DEFAULT_LOSS_THRESHOLD_PCT,
 ): LossRate {
   const taux = entrees > 0 ? Math.round((pertes / entrees) * 1000) / 10 : 0;
-  return { taux, depasseSeuil: taux >= seuilPct };
+  const sansEntree = entrees <= 0 && pertes > 0;
+  return { taux, sansEntree, depasseSeuil: sansEntree || taux >= seuilPct };
 }
