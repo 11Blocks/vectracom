@@ -23,8 +23,10 @@
 | 9 | **PER-2** | Permanence : rotation équitable tenant compte de l'historique (aujourd'hui repart de zéro à chaque appel) | 🟠 astreinte inéquitable | M | PER-1 conseillé avant |
 | 10 | **PAR-1** | Partners : `exclusiveZone` → lien vers `zones` (FK) ; rendre `level` et `parentPartnerId` modifiables via l'API | 🟠 chaîne de sous-traitance non éditable | M | migration de données (texte → zone_id) ; utile à la cascade |
 | 11 | **PAY-2** | Payroll : calculer le revenu depuis les missions validées de la période et déduire les charges (carburant, mécanique, location) avant 65/35 | 🔴 revenu saisi à la main | L | `computeCascade` + frais de mission (L3) ; règles de déduction à confirmer |
-| 12 | **UI-1** (trouvé 11/11/2026) | `/remuneration` : le badge « Brouillon » est en ambre `#f5a623`, couleur réservée aux sorties IA (charte) → couleur neutre (gris) | 🟡 charte graphique | S | prochain lot UI |
-| 12b | **UI-1b** (trouvé 11/11/2026) | `/rapports/performance` : le taux global est affiché en ambre `#f5a623` (réservé IA) → couleur neutre | 🟡 charte graphique | S | même lot que UI-1 |
+| 12 | **UI-1** ✅ (codé 11/11/2026, à valider) | `/remuneration` : le badge « Brouillon » est en ambre `#f5a623`, couleur réservée aux sorties IA (charte) → couleur neutre (gris) | 🟡 charte graphique | S | prochain lot UI |
+| 12b | **UI-1b** ✅ (codé 11/11/2026, à valider) | `/rapports/performance` : le taux global est affiché en ambre `#f5a623` (réservé IA) → couleur neutre | 🟡 charte graphique | S | même lot que UI-1 |
+| 12c | **UI-1c** ✅ (codé 11/11/2026, à valider) | Autres usages de l’ambre `#f5a623` hors IA : `/remuneration` montants binôme (3 endroits) → neutre `#e8ede9` ; `/rapports/performance` seuil intermédiaire 45–60 % (graphique semaines, barres équipes, badges OLT) → orange `#D9822B` ; axe droit du graphique équipes (échelle de la courbe « Taux % », pas un seuil) → gris `#7a8f80` comme l’axe gauche. Le bloc « Interprétation IA » reste ambre (légitime) | 🟡 charte graphique | S | même lot UI |
+| 13 | **UI-2** (trouvé 11/11/2026) | `/rapports/performance`, graphique équipes : la barre « OK » est en orange vif `#f97316` et « NOK » en gris `#94a3b8` — inverse de la logique de la page (OK devrait être vert `#0f9d70`, NOK rouge `#C0392B` ou neutre) | 🟡 lisibilité | S | prochain lot UI |
 
 ## Ordre proposé
 
@@ -35,6 +37,7 @@
 
 ## Hors backlog (suivis ailleurs)
 
-- Cascade tarifaire `computeCascade` + migration 020 `prestation_key` — plan validé, implémentation à venir.
-- B2 / C1 / C2 et questions Q1–Q4 — `docs/QUESTIONS-DIRECTEUR-ONECOMIT.md`.
-- L8 mobile — bloqué (déploiement des correctifs tenant, endpoints chef d'équipe, visibilité rémunération).
+- Cascade tarifaire `computeCascade` + migration 020 `prestation_key` — ✅ en prod depuis le 11/11/2026.
+- B2 (Q_B2) / C1 / C2 et questions Q1–Q4, Q7–Q9 — `docs/QUESTIONS-DIRECTEUR-ONECOMIT.md` (10 points). Seuil de pertes `>=` provisoire : décision Moussa.
+- L8 mobile — correctifs tenant déployés et visibilité tranchée (chacun sa part) ; reste à ouvrir les endpoints au chef d’équipe. Plan détaillé à valider avant de coder.
+- Factures (brancher la cascade) — ❌ après Q7/Q8 et confirmation de l’origine des prix de la grille (SONATEL ou ONECOMIT), avec accord Moussa (risque de double réduction).

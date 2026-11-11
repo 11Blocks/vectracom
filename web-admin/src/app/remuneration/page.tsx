@@ -61,7 +61,7 @@ function Content() {
         </Card>
         <Card className="p-4">
           <p className="text-xs text-[#7a8f80] mb-1">Part binômes (35 %)</p>
-          <p className="text-2xl font-bold text-[#f5a623]">{fmtF(totalBinome)}</p>
+          <p className="text-2xl font-bold text-[#e8ede9]">{fmtF(totalBinome)}</p>
         </Card>
       </div>
 
@@ -99,12 +99,12 @@ function Content() {
                     <p className="text-[10px] text-[#7a8f80]">{r.chefName ?? '—'}</p>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <p className="font-semibold text-[#f5a623] tabular-nums">{fmtF(r.binomeShare)}</p>
+                    <p className="font-semibold text-[#e8ede9] tabular-nums">{fmtF(r.binomeShare)}</p>
                     <p className="text-[10px] text-[#7a8f80]">{r.binomeName ?? '—'}</p>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {r.payrollId
-                      ? <Badge className={r.status === 'validee' ? 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/30' : 'bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/30'}>{r.status === 'validee' ? 'Validée' : 'Brouillon'}</Badge>
+                      ? <Badge className={r.status === 'validee' ? 'bg-[#0f9d70]/20 text-[#0f9d70] border-[#0f9d70]/30' : 'bg-[#1a2420] text-[#7a8f80] border-[#1e2e25]'}>{r.status === 'validee' ? 'Validée' : 'Brouillon'}</Badge>
                       : <Badge className="bg-slate-500/20 text-slate-300 border-slate-500/30">Non saisie</Badge>}
                   </td>
                   <td className="px-2 py-3 text-right">
@@ -156,7 +156,7 @@ function PayrollModal({ row, period, techs, onClose, onSubmit, loading }: {
           </div>
           <div className="p-3 rounded-lg bg-[#0a0f0d] border border-[#1e2e25] text-center">
             <p className="text-[10px] text-[#7a8f80] mb-1">Binôme ({100 - chefPct} %)</p>
-            <p className="text-lg font-bold text-[#f5a623] tabular-nums">{fmt(binomeShare)} F</p>
+            <p className="text-lg font-bold text-[#e8ede9] tabular-nums">{fmt(binomeShare)} F</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">

@@ -197,7 +197,7 @@ function Content() {
         </div>
         <div className="p-3 rounded-lg bg-[#111916] border border-[#1e2e25] text-center">
           <p className="text-[10px] text-[#7a8f80] mb-1">Taux OK</p>
-          <p className="text-2xl font-bold text-[#f5a623]">{summary.taux} %</p>
+          <p className="text-2xl font-bold text-[#e8ede9]">{summary.taux} %</p>
         </div>
       </div>
 
@@ -238,7 +238,7 @@ function Content() {
                 />
                 <Bar dataKey="taux" radius={[4, 4, 0, 0]}>
                   {(trend.weeks as any[]).map((w, i) => (
-                    <Cell key={i} fill={w.cas === 0 ? '#1e2e25' : w.taux >= 60 ? '#0f9d70' : w.taux >= 45 ? '#f5a623' : '#C0392B'} />
+                    <Cell key={i} fill={w.cas === 0 ? '#1e2e25' : w.taux >= 60 ? '#0f9d70' : w.taux >= 45 ? '#D9822B' : '#C0392B'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -278,7 +278,7 @@ function Content() {
                   <span className="text-sm text-[#C0392B] text-right tabular-nums">{t.nok}</span>
                   <div className="flex items-center justify-end gap-1.5">
                     <div className="w-12 h-1.5 rounded-full bg-[#1a2420] overflow-hidden">
-                      <div className={'h-full rounded-full ' + (t.taux >= 60 ? 'bg-[#0f9d70]' : t.taux >= 45 ? 'bg-[#f5a623]' : 'bg-[#C0392B]')} style={{ width: t.taux + '%' }} />
+                      <div className={'h-full rounded-full ' + (t.taux >= 60 ? 'bg-[#0f9d70]' : t.taux >= 45 ? 'bg-[#D9822B]' : 'bg-[#C0392B]')} style={{ width: t.taux + '%' }} />
                     </div>
                     <span className="text-xs tabular-nums text-[#e8ede9] w-8 text-right">{t.taux}%</span>
                   </div>
@@ -297,7 +297,7 @@ function Content() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e2e25" />
                     <XAxis dataKey="name" stroke="#7a8f80" fontSize={9} angle={-45} textAnchor="end" interval={0} height={70} />
                     <YAxis yAxisId="left" stroke="#7a8f80" fontSize={10} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#f5a623" fontSize={10} domain={[0, 100]} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#7a8f80" fontSize={10} domain={[0, 100]} />
                     <Tooltip contentStyle={{ background: '#0a0f0d', border: '1px solid #1e2e25', borderRadius: 8, fontSize: 11 }}
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.full ?? ''} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -326,7 +326,7 @@ function Content() {
                   <span className="text-sm text-[#0f9d70] text-right tabular-nums">{o.ok}</span>
                   <span className="text-sm text-[#C0392B] text-right tabular-nums">{o.nok}</span>
                   <span className="text-sm text-right tabular-nums">
-                    <Badge className={o.taux >= 60 ? 'bg-[#0f9d70]/15 text-[#0f9d70] border-[#0f9d70]/30' : o.taux >= 45 ? 'bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/30' : 'bg-[#C0392B]/15 text-[#C0392B] border-[#C0392B]/30'}>{o.taux}%</Badge>
+                    <Badge className={o.taux >= 60 ? 'bg-[#0f9d70]/15 text-[#0f9d70] border-[#0f9d70]/30' : o.taux >= 45 ? 'bg-[#D9822B]/15 text-[#D9822B] border-[#D9822B]/30' : 'bg-[#C0392B]/15 text-[#C0392B] border-[#C0392B]/30'}>{o.taux}%</Badge>
                   </span>
                 </div>
               ))}
