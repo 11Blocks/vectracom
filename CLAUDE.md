@@ -80,6 +80,9 @@ Comptes de test locaux : `admin@onecomit.sn` (admin tenant), `admin@green-t.sn` 
 - **Schéma** : uniquement par migration SQL idempotente numérotée ; jamais `synchronize`.
 - **Libellés SONATEL** repris à l'identique ; missions créées manuellement suffixées **« -OT »** et marquées `rajout=true`.
 - **Cascade tarifaire** (décision Moussa, 10/11/2026) : calcul **au franc près, sans arrondi au millier** — 27 000 × 65 % = 17 550 ; 17 550 × 80 % = **14 040**. Les taux s'appliquent aux **prestations** (S+I APP 80 / PASSAGE 87 / Survey 93 / RELEVE 91), pas seulement aux items : colonne `pricing_rules.prestation_key` (migration 020, à venir). Priorité de la règle appliquée : `prestation_key` > `item_id` > règle par défaut (les deux à NULL).
+- **Règles de cascade — limites acceptées** (décision Moussa, 11/11/2026) :
+  - (c) Deux créations simultanées avec dates différentes ne sont pas bloquées par l'index (seul un doublon exact de date de début l'est ; le chevauchement est contrôlé par l'API, pas par la base). Risque accepté (1 admin).
+  - (d) En modification, item/parent/enfant ne sont pas modifiables (historique propre). Désactiver + recréer.
 - **Contrainte `pricing_rules`** : la contrainte d'unicité de `pricing_rules` s'appelle `pricing_rules_company_id_parent_partner_id_child_partner_id_key` (créée par 012 sans nom ; le `@Unique('uq_pricing_rule')` de l'ancienne entité ne correspondait pas à la base). La migration 020 la retrouve par type (`contype = 'u'`), pas par nom, et la remplace par l'index `uq_pricing_rule_v2` (NULLS NOT DISTINCT). Ne pas la renommer.
 - **Visibilité de la rémunération** (décision Moussa, 10/11/2026) : **chacun ne voit que ce qui le concerne**. Le chef d'équipe voit uniquement sa part, le binôme uniquement la sienne ; admin et direction voient tout. À appliquer côté API (pas seulement dans l'écran) pour L8 mobile.
 - **IA** : propose, ne décide jamais — validation humaine obligatoire.
@@ -162,5 +165,8 @@ Interlocuteurs : **Moussa (Green-T)** valide techniquement ; le **directeur ONEC
 | Q2 | « Instances » = techniciens par chef, ou interventions actives ? | L0/L7 |
 | Q3 | Le niveau 2 de la chaîne est-il toujours ONECOMIT ? | L0 (cascade) |
 | Q4 | Satisfaction client : quel canal (SMS / WhatsApp / app) et qui répond ? | L7 |
+| Q7 | « S+I APP » est-il une variante appartement de `survey + installation` ? Si oui, quelle clé ? | taux 80 % par prestation |
+| Q8 | « PASSAGE » correspond-il à `deplacement sav` ou à une autre clé ? | taux 87 % par prestation |
+| Q9 | Une règle de cascade qui pointe vers un partenaire **désactivé** doit-elle continuer à s'appliquer, ou être ignorée ? Par défaut : elle s'applique (comportement actuel). À trancher. 🟡 | cascade |
 
 Ne pas implémenter de choix sur ces points sans réponse ; si une hypothèse par défaut est utilisée, la rendre configurable et la signaler.

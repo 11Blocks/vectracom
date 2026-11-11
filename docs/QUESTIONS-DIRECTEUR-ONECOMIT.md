@@ -1,8 +1,8 @@
-Objet : VECTRACOM — 9 points à valider pour finaliser les évolutions
+Objet : VECTRACOM — 10 points à valider pour finaliser les évolutions
 
 Bonjour Monsieur le Directeur,
 
-Les évolutions décidées lors de notre réunion sont en production (Items, zones et pilotes, permanence, renforts, achats SONATEL, rémunération 65/35, cartographie). Pour terminer, nous avons besoin de votre arbitrage sur 9 points. Pour chacun, nous indiquons ce que nous appliquerons par défaut si nous n'avons pas de réponse d'ici le [date à compléter].
+Les évolutions décidées lors de notre réunion sont en production (Items, zones et pilotes, permanence, renforts, achats SONATEL, rémunération 65/35, cartographie). Pour terminer, nous avons besoin de votre arbitrage sur 10 points. Pour chacun, nous indiquons ce que nous appliquerons par défaut si nous n'avons pas de réponse d'ici le [date à compléter].
 
 1. Les 5 rubriques du stock (Q_B2)
 Nous avons compris que les 5 rubriques sont : Stock, Focus Stock, Suivi Consommation, Comptabilité Matière, Ventilation aux Équipes.
@@ -49,6 +49,11 @@ Par défaut : nous appliquons la règle « Survey + Installation » existante, s
 Question : « PASSAGE » correspond-il au « Déplacement SAV », ou à une autre prestation ?
 Pourquoi c'est bloquant : son taux de reversement (87 %) doit être rattaché à la bonne prestation.
 Par défaut : aucun taux « PASSAGE » n'est appliqué tant que la correspondance n'est pas confirmée ; la règle par défaut s'applique.
+
+10. Partenaire désactivé dans la chaîne (Q9)
+Question : une règle de reversement qui concerne un partenaire désactivé (par exemple un sous-traitant qui ne travaille plus avec vous) doit-elle continuer à s'appliquer dans les calculs, ou être ignorée ?
+Pourquoi c'est bloquant : cela change le montant calculé pour toute la chaîne de sous-traitance tant que la règle reste en place.
+Par défaut : la règle continue de s'appliquer (comportement actuel) ; pour l'arrêter, il faut désactiver la règle elle-même.
 
 Nous restons disponibles pour en parler de vive voix.
 
